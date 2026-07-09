@@ -1,4 +1,5 @@
-﻿using ArturRios.Util.Http;
+﻿using System.Net.Http.Headers;
+using ArturRios.Util.Http;
 using ArturRios.Util.WebApi.Security.Records;
 
 namespace ArturRios.Util.WebApi.Client;
@@ -12,11 +13,11 @@ public abstract class BaseWebApiClientRoute(HttpGateway gateway)
     {
         var output = await Gateway.PostAsync<Authentication>(authRoute, credentials);
 
-        return output.Body ?? throw new Exception("Could not authenticate");
+        return output.Body ?? throw new WebApiClientException("Could not authenticate: the authentication response contained no body.");
     }
 
     protected void Authorize(string authToken) =>
-        Gateway.Client.DefaultRequestHeaders.Add("Authorization", $"Bearer {authToken}");
+        Gateway.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
 
     protected async Task AuthenticateAndAuthorizeAsync(Credentials credentials, string authRoute)
     {
