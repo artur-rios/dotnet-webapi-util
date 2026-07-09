@@ -89,8 +89,10 @@ public abstract class WebApiStartup(string[] args)
             new ConfigurationLoader(Builder.Configuration, Builder.Environment.EnvironmentName,
                 null, sp.GetRequiredService<ILogger<ConfigurationLoader>>()));
 
-        using var provider = Builder.Services.BuildServiceProvider();
-        var configurationLoader = provider.GetRequiredService<ConfigurationLoader>();
+        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var configurationLoader = new ConfigurationLoader(
+            Builder.Configuration, Builder.Environment.EnvironmentName, null,
+            loggerFactory.CreateLogger<ConfigurationLoader>());
 
         SetSwaggerConfigFromParameters();
 
