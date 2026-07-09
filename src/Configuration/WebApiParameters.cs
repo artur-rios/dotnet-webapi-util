@@ -68,7 +68,9 @@ public class WebApiParameters
     /// <summary>Whether a <c>.env</c> file should be loaded. Defaults to <c>true</c>.</summary>
     public bool UseEnvFile { get; set; } = true;
 
-    /// <summary>Whether Swagger generation/UI should be enabled. Defaults to <c>true</c>.</summary>
+    /// <summary>Parsed from the <c>EnableSwaggerDocs</c> argument. Reserved and not currently consulted by
+    /// <see cref="WebApiStartup"/>; Swagger is gated by environment (see <see cref="SwaggerEnvironments"/> and
+    /// <see cref="GetSwaggerEnvironments"/>). Defaults to <c>true</c>.</summary>
     public bool EnableSwaggerDocs { get; set; } = true;
 
     /// <summary>The environment names in which Swagger should be enabled, as parsed from the <c>SwaggerEnvironments</c> argument.</summary>
