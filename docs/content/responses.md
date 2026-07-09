@@ -79,9 +79,9 @@ service's error messages, with no branching in the action itself.
 
 ## Where to next
 
-- **[Architecture](/architecture/)** — where `ResponseResolver` sits at the end of the request pipeline,
+- **[Architecture](/dotnet-webapi-util/architecture)** — where `ResponseResolver` sits at the end of the request pipeline,
   and the envelope class hierarchy (`ProcessOutput` → `DataOutput<T>` → `PaginatedOutput<T>`).
-- **[Configuration](/configuration/)** — `AddCustomInvalidModelStateResponse()`, which shapes validation
+- **[Configuration](/dotnet-webapi-util/configuration)** — `AddCustomInvalidModelStateResponse()`, which shapes validation
   failures the same way.
-- **[Middleware & Diagnostics](/middleware-and-diagnostics/)** — `ExceptionMiddleware`, which returns the
+- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — `ExceptionMiddleware`, which returns the
   same `DataOutput<string>` shape for unhandled exceptions that never reach a `Resolve` call.

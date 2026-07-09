@@ -127,12 +127,8 @@ public class JwtMiddleware(
     {
         var header = context.Request.Headers.Authorization.FirstOrDefault();
 
-        if (string.IsNullOrWhiteSpace(header) || !AuthenticationHeaderValue.TryParse(header, out var parsed))
-        {
-            return string.Empty;
-        }
-
-        if (!string.Equals(parsed.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase) ||
+        if (string.IsNullOrWhiteSpace(header) || !AuthenticationHeaderValue.TryParse(header, out var parsed) ||
+            !string.Equals(parsed.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase) ||
             string.IsNullOrWhiteSpace(parsed.Parameter))
         {
             return string.Empty;

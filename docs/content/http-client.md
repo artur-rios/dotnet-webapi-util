@@ -100,8 +100,8 @@ flowchart LR
 
 ## Where to next
 
-- **[Middleware & Diagnostics](/middleware-and-diagnostics/)** — `TracePropagationHandler` and the trace
+- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — `TracePropagationHandler` and the trace
   id it propagates.
-- **[Security](/security/)** — `Credentials`, `Authentication` and the login flow this client typically
+- **[Security](/dotnet-webapi-util/security)** — `Credentials`, `Authentication` and the login flow this client typically
   calls into.
-- **[Responses](/responses/)** — the `ArturRios.Output` envelopes returned by the APIs these clients call.
+- **[Responses](/dotnet-webapi-util/responses)** — the `ArturRios.Output` envelopes returned by the APIs these clients call.

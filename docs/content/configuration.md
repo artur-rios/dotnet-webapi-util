@@ -151,9 +151,9 @@ call.
 
 ## Where to next
 
-- **[Architecture](/architecture/)** — how the pipeline, security model and response envelopes fit
+- **[Architecture](/dotnet-webapi-util/architecture)** — how the pipeline, security model and response envelopes fit
   together.
-- **[Security](/security/)** — `ConfigureSecurity()`, JWT validation modes, and role-based authorization.
-- **[Middleware & Diagnostics](/middleware-and-diagnostics/)** — the built-in middlewares registered via
+- **[Security](/dotnet-webapi-util/security)** — `ConfigureSecurity()`, JWT validation modes, and role-based authorization.
+- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — the built-in middlewares registered via
   `AddMiddlewares`.
-- **[Responses](/responses/)** — `ResponseResolver` and the invalid-model-state envelope shape.
+- **[Responses](/dotnet-webapi-util/responses)** — `ResponseResolver` and the invalid-model-state envelope shape.

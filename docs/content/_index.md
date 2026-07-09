@@ -2,7 +2,7 @@
 title = 'Dotnet WebApi Util'
 +++
 
-# Dotnet WebApi Util
+# Documentation
 
 **`ArturRios.Util.WebApi`** is a set of building blocks for ASP.NET Core web APIs in .NET. It bundles a
 base class for bootstrapping the host (configuration, logging, Swagger, middleware pipeline),
@@ -52,14 +52,14 @@ exceptions.
 
 ## Where to next
 
-- **[Architecture](/architecture/)** — how the pieces above fit together and the design principles
+- **[Architecture](/dotnet-webapi-util/architecture)** — how the pieces above fit together and the design principles
   behind them.
-- **[Configuration](/configuration/)** — bootstrapping a host with `WebApiStartup` and `WebApiParameters`.
-- **[Security](/security/)** — JWT validation modes, cached revalidation, and role-based authorization.
-- **[Middleware & Diagnostics](/middleware-and-diagnostics/)** — exception handling and distributed
+- **[Configuration](/dotnet-webapi-util/configuration)** — bootstrapping a host with `WebApiStartup` and `WebApiParameters`.
+- **[Security](/dotnet-webapi-util/security)** — JWT validation modes, cached revalidation, and role-based authorization.
+- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — exception handling and distributed
   tracing.
-- **[HTTP Client](/http-client/)** — building typed clients on top of `BaseWebApiClient`.
-- **[Responses](/responses/)** — resolving `ArturRios.Output` envelopes into `ActionResult`s.
+- **[HTTP Client](/dotnet-webapi-util/http-client)** — building typed clients on top of `BaseWebApiClient`.
+- **[Responses](/dotnet-webapi-util/responses)** — resolving `ArturRios.Output` envelopes into `ActionResult`s.
 
 The source lives at [github.com/artur-rios/dotnet-webapi-util](https://github.com/artur-rios/dotnet-webapi-util),
 licensed under the MIT License.

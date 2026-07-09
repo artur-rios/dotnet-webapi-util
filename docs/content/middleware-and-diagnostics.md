@@ -105,10 +105,10 @@ See [HTTP Client](/http-client/) for how `BaseWebApiClient` fits into that regis
 
 ## Where to next
 
-- **[Architecture](/architecture/)** — how these middlewares sit relative to `JwtMiddleware` and
+- **[Architecture](/dotnet-webapi-util/architecture)** — how these middlewares sit relative to `JwtMiddleware` and
   `ResponseResolver` in the full pipeline.
-- **[Configuration](/configuration/)** — registering middlewares via `AddMiddlewares` as part of
+- **[Configuration](/dotnet-webapi-util/configuration)** — registering middlewares via `AddMiddlewares` as part of
   `WebApiStartup`.
-- **[HTTP Client](/http-client/)** — pairing `TracePropagationHandler` with `BaseWebApiClient`.
-- **[Responses](/responses/)** — the `DataOutput<T>`/`ProcessOutput` envelopes `ExceptionMiddleware` and
+- **[HTTP Client](/dotnet-webapi-util/http-client)** — pairing `TracePropagationHandler` with `BaseWebApiClient`.
+- **[Responses](/dotnet-webapi-util/responses)** — the `DataOutput<T>`/`ProcessOutput` envelopes `ExceptionMiddleware` and
   `ResponseResolver` both use.

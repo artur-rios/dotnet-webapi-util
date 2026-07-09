@@ -158,9 +158,9 @@ revocations bounded.
 
 ## Where to next
 
-- **[Architecture](/architecture/)** — the full token → `JwtMiddleware` → `Items["User"]` →
+- **[Architecture](/dotnet-webapi-util/architecture)** — the full token → `JwtMiddleware` → `Items["User"]` →
   authorization-filter flow, alongside the rest of the pipeline.
-- **[Configuration](/configuration/)** — registering `JwtMiddleware` via `AddMiddlewares` and wiring up
+- **[Configuration](/dotnet-webapi-util/configuration)** — registering `JwtMiddleware` via `AddMiddlewares` and wiring up
   `ConfigureSecurity()`.
-- **[Middleware & Diagnostics](/middleware-and-diagnostics/)** — how `ExceptionMiddleware` and
+- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — how `ExceptionMiddleware` and
   `TraceActivityMiddleware` relate to the rest of the pipeline `JwtMiddleware` runs in.

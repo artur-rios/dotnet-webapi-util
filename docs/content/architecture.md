@@ -144,9 +144,9 @@ See [Responses](/responses/) for the full mapping reference.
 
 ## Where to next
 
-- **[Configuration](/configuration/)** — the `WebApiStartup` lifecycle and `WebApiParameters`.
-- **[Security](/security/)** — JWT validation modes, caching, and role-based authorization in depth.
-- **[Middleware & Diagnostics](/middleware-and-diagnostics/)** — exception handling and distributed
+- **[Configuration](/dotnet-webapi-util/configuration)** — the `WebApiStartup` lifecycle and `WebApiParameters`.
+- **[Security](/dotnet-webapi-util/security)** — JWT validation modes, caching, and role-based authorization in depth.
+- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — exception handling and distributed
   tracing.
-- **[HTTP Client](/http-client/)** — building typed clients on top of `BaseWebApiClient`.
-- **[Responses](/responses/)** — the full `ResponseResolver` mapping reference.
+- **[HTTP Client](/dotnet-webapi-util/http-client)** — building typed clients on top of `BaseWebApiClient`.
+- **[Responses](/dotnet-webapi-util/responses)** — the full `ResponseResolver` mapping reference.
