@@ -1,4 +1,53 @@
-baseURL = 'https://example.org/'
+baseURL = 'https://artur-rios.github.io/dotnet-webapi-util'
 locale = 'en-us'
-title = 'My New Hugo Project'
+title = 'Dotnet WebApi Util'
 theme = 'hugo-theme-re-terminal'
+
+[params]
+author_email = 'arturdev@duck.com'
+name = 'Artur Rios'
+
+[params.logo]
+logoText = 'Dotnet WebApi Util'
+
+[menu]
+[[menu.main]]
+identifier = "architecture"
+name = "Architecture"
+url = "/architecture/"
+weight = 10
+[[menu.main]]
+identifier = "configuration"
+name = "Configuration"
+url = "/configuration/"
+weight = 20
+[[menu.main]]
+identifier = "security"
+name = "Security"
+url = "/security/"
+weight = 30
+[[menu.main]]
+identifier = "middleware-and-diagnostics"
+name = "Middleware & Diagnostics"
+url = "/middleware-and-diagnostics/"
+weight = 40
+[[menu.main]]
+identifier = "http-client"
+name = "HTTP Client"
+url = "/http-client/"
+weight = 50
+[[menu.main]]
+identifier = "responses"
+name = "Responses"
+url = "/responses/"
+weight = 60
+[[menu.main]]
+identifier = "author"
+name = "Author"
+url = "https://www.artur-rios.tech/"
+weight = 70
+[[menu.main]]
+identifier = "github"
+name = "GitHub"
+url = "https://github.com/artur-rios/dotnet-webapi-util"
+weight = 80
