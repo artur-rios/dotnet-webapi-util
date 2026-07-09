@@ -1,7 +1,7 @@
 using ArturRios.Configuration.Providers;
 using ArturRios.Jwt;
 using ArturRios.Output;
-using ArturRios.Util.WebApi.Api.Configuration;
+using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Configuration;

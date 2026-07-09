@@ -1,7 +1,7 @@
 ﻿using ArturRios.Util.Http;
 using ArturRios.Util.WebApi.Security.Records;
 
-namespace ArturRios.Util.WebApi.Api.Client;
+namespace ArturRios.Util.WebApi.Client;
 
 public abstract class BaseWebApiClientRoute(HttpGateway gateway)
 {

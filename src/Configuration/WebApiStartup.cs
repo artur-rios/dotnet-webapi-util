@@ -17,7 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace ArturRios.Util.WebApi.Api.Configuration;
+namespace ArturRios.Util.WebApi.Configuration;
 
 public abstract class WebApiStartup(string[] args)
 {

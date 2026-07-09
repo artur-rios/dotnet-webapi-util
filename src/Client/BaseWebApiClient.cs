@@ -1,6 +1,6 @@
 ﻿using ArturRios.Util.Http;
 
-namespace ArturRios.Util.WebApi.Api.Client;
+namespace ArturRios.Util.WebApi.Client;
 
 public abstract class BaseWebApiClient
 {

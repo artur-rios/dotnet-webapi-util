@@ -1,4 +1,4 @@
-﻿namespace ArturRios.Util.WebApi.Api.Configuration;
+﻿namespace ArturRios.Util.WebApi.Configuration;
 
 public static class AppSettingsKeys
 {

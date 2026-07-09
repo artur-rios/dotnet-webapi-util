@@ -1,7 +1,7 @@
 ﻿using ArturRios.Configuration.Enums;
 using ArturRios.Extensions;
 
-namespace ArturRios.Util.WebApi.Api.Configuration;
+namespace ArturRios.Util.WebApi.Configuration;
 
 public class WebApiParameters
 {
