@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31912.275
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArturRios.Util.WebApi", "ArturRios.Util.WebApi.csproj", "{DF0A8B7F-E8A2-42CC-B5DB-D7EF49F67196}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArturRios.Util.WebApi.Tests", "..\tests\ArturRios.Util.WebApi.Tests.csproj", "{38916A59-C5FB-4C2E-B354-8562DA39A09B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{DF0A8B7F-E8A2-42CC-B5DB-D7EF49F67196}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DF0A8B7F-E8A2-42CC-B5DB-D7EF49F67196}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DF0A8B7F-E8A2-42CC-B5DB-D7EF49F67196}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38916A59-C5FB-4C2E-B354-8562DA39A09B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38916A59-C5FB-4C2E-B354-8562DA39A09B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38916A59-C5FB-4C2E-B354-8562DA39A09B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38916A59-C5FB-4C2E-B354-8562DA39A09B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

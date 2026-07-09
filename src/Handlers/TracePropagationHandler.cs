@@ -10,6 +10,10 @@ public class TracePropagationHandler : DelegatingHandler
 {
     private const string TraceParentHeader = "traceparent";
 
+    /// <summary>Adds the current <see cref="Activity"/>'s W3C <c>traceparent</c> header to the outgoing
+    /// request, if one isn't already present, before delegating to the inner handler.</summary>
+    /// <param name="request">The outgoing HTTP request.</param>
+    /// <param name="cancellationToken">A token to cancel the send operation.</param>
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
