@@ -1,8 +1,76 @@
-﻿# ArturRios.Util.WebApi
+# ArturRios.Util.WebApi
 
-Utilities for developing web API's in .NET
+Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
+(configuration, logging, Swagger, middleware pipeline), stateless-or-revalidating JWT authentication with
+role-based authorization, cross-cutting middleware for exceptions and distributed tracing, a thin
+typed-`HttpClient` base for calling other services, and a resolver that turns `ArturRios.Output` envelopes
+into `ActionResult`s.
 
-## Authentication
+## Install
+
+```bash
+dotnet add package ArturRios.Util.WebApi
+```
+
+Requires **.NET 10**.
+
+## Feature overview
+
+| Area | What it does | Docs |
+|---|---|---|
+| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, logging, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/configuration/) |
+| Security (JWT + roles) | `JwtMiddleware` validates the bearer token and attaches an `AuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
+| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/) |
+| HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/http-client/) |
+| Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/responses/) |
+
+See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/architecture/)** for how these pieces fit together.
+
+## Quick start
+
+### Configuration / bootstrap
+
+Derive from `WebApiStartup` and implement `Build()`/`ConfigureApp()` using its hooks:
+
+```csharp
+public class Startup(string[] args) : WebApiStartup(args)
+{
+    public override void Build()
+    {
+        LoadConfiguration();
+        AddLogging();
+        AddCustomInvalidModelStateResponse();
+        UseSwaggerGen(jwtAuthentication: true);
+        Builder.Services.AddControllers();
+
+        AddDependencies();
+
+        BuildApp();
+        ConfigureApp();
+    }
+
+    public override void ConfigureApp()
+    {
+        AddMiddlewares([
+            typeof(TraceActivityMiddleware),
+            typeof(ExceptionMiddleware),
+            typeof(JwtMiddleware)
+        ]);
+
+        UseSwagger();
+        App.MapControllers();
+    }
+}
+
+new Startup(args).BuildAndRun();
+```
+
+Startup behavior can be tweaked without code changes via command-line args parsed by `WebApiParameters`
+(`Environment:Production`, `EnableSwaggerDocs:false`, `UseAppSetting:false`, `UseEnvFile:false`,
+`SwaggerEnvironments:[Development,Staging]`), and Swagger can also be toggled through the
+`Swagger:Enabled` key in `appsettings.json` (see `AppSettingsKeys.SwaggerEnabled`).
+
+### Security
 
 `JwtMiddleware` validates the bearer JSON Web Token on each request, then attaches an
 `AuthenticatedUser` to `HttpContext.Items["User"]`. Swagger routes and endpoints marked with
@@ -26,7 +94,7 @@ builder.Services.AddSingleton(new JwtAuthenticationOptions
 });
 ```
 
-### Caching provider lookups
+#### Caching provider lookups
 
 When using `Revalidate`, wrap your `IAuthenticationProvider` with `CachedAuthenticationProvider` to
 serve repeated lookups of the same user from an `IMemoryCache` within a short time-to-live:
@@ -42,10 +110,107 @@ builder.Services.AddCachedAuthenticationProvider<MyAuthenticationProvider>(optio
 This bounds staleness to the TTL while collapsing bursts of requests from the same user into a single
 store hit.
 
+#### Declaring access rules
+
+`[Authorize]` requires an authenticated user (401 otherwise); `[RoleRequirement(...)]` additionally
+requires the user's role to be one of the given values (403 otherwise); `[AllowAnonymous]` exempts a
+single action from both:
+
+```csharp
+[Authorize]
+[RoleRequirement(1, 2)] // e.g. Admin, Manager
+public class AccountsController : ControllerBase
+{
+    [AllowAnonymous]
+    [HttpPost("login")]
+    public IActionResult Login(Credentials credentials) { /* ... */ }
+
+    [HttpGet]
+    public IActionResult GetAll() { /* only roles 1 and 2 reach here */ }
+}
+```
+
+### Middleware & diagnostics
+
+Register the built-in middlewares (each derives from `WebApiMiddleware`) in pipeline order with
+`AddMiddlewares`:
+
+```csharp
+AddMiddlewares([
+    typeof(TraceActivityMiddleware), // assigns/propagates a W3C trace id
+    typeof(ExceptionMiddleware),     // turns unhandled exceptions into a JSON error envelope
+    typeof(JwtMiddleware)
+]);
+```
+
+`TraceActivityMiddleware` puts the current trace id on `HttpContext.TraceIdentifier` and
+`HttpContext.Items["TraceId"]` and echoes it on the response's `traceparent` header. To keep that trace
+id flowing into calls made with `HttpClient`, register `TracePropagationHandler` as a message handler:
+
+```csharp
+builder.Services.AddTransient<TracePropagationHandler>();
+builder.Services.AddHttpClient<MyApiClient>()
+    .AddHttpMessageHandler<TracePropagationHandler>();
+```
+
+### HTTP client
+
+Derive `BaseWebApiClient` for the client and `BaseWebApiClientRoute` for each group of related routes:
+
+```csharp
+public class MyApiClient : BaseWebApiClient
+{
+    public AccountsRoute Accounts { get; private set; } = null!;
+
+    public MyApiClient(HttpClient httpClient) : base(httpClient) { }
+
+    protected override void SetRoutes()
+    {
+        Accounts = new AccountsRoute(Gateway);
+    }
+}
+
+public class AccountsRoute(HttpGateway gateway) : BaseWebApiClientRoute(gateway)
+{
+    public override string BaseUrl => "/accounts";
+
+    public Task LoginAsync(Credentials credentials) =>
+        AuthenticateAndAuthorizeAsync(credentials, $"{BaseUrl}/login");
+}
+```
+
+`AuthenticateAndAuthorizeAsync` posts the credentials, then applies the returned token as the
+`Authorization: Bearer` header for every subsequent call made through the shared `Gateway`.
+
+### Responses
+
+`ResponseResolver.Resolve(...)` maps an `ArturRios.Output` envelope to an `ActionResult`, defaulting the
+HTTP status to 200 on success and 400 on failure:
+
+```csharp
+[HttpGet("{id:int}")]
+public ActionResult<DataOutput<UserDto?>> GetById(int id)
+{
+    DataOutput<UserDto?> output = _userService.GetById(id);
+
+    return ResponseResolver.Resolve(output);
+}
+```
+
+Overloads also accept `PaginatedOutput<T>` and `ProcessOutput`, and all of them take an optional
+explicit `statusCode` to override the default.
+
+## Documentation
+
+Full documentation, including architecture diagrams: **https://artur-rios.github.io/dotnet-webapi-util**
+
 ## Versioning
 
 Semantic Versioning (SemVer). Breaking changes result in a new major version. New methods or non-breaking behavior
 changes increment the minor version; fixes or tweaks increment the patch.
+
+Version 2.0 renamed the `ArturRios.Util.WebApi.Api.Configuration` and `ArturRios.Util.WebApi.Api.Client`
+namespaces to `ArturRios.Util.WebApi.Configuration` and `ArturRios.Util.WebApi.Client`.
 
 ## Build, test and publish
 
