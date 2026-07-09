@@ -66,9 +66,10 @@ new Startup(args).BuildAndRun();
 ```
 
 Startup behavior can be tweaked without code changes via command-line args parsed by `WebApiParameters`
-(`Environment:Production`, `EnableSwaggerDocs:false`, `UseAppSetting:false`, `UseEnvFile:false`,
-`SwaggerEnvironments:[Development,Staging]`), and Swagger can also be toggled through the
-`Swagger:Enabled` key in `appsettings.json` (see `AppSettingsKeys.SwaggerEnabled`).
+(`Environment:Production`, `UseAppSetting:false`, `UseEnvFile:false`,
+`SwaggerEnvironments:[Development,Staging]`). Swagger is enabled per environment: it is served in
+`Development` and `Local` by default, and the allowed environments can be overridden with the
+`SwaggerEnvironments:[...]` arg or by passing `allowedEnvironments` to `UseSwagger` / `UseSwaggerGen`.
 
 ### Security
 
