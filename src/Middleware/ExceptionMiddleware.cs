@@ -32,7 +32,8 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
     {
         if (context.RequestAborted.IsCancellationRequested || context.Response.HasStarted)
         {
-            logger.LogDebug("Cannot write error response because the request was aborted or the response has already started.");
+            logger.LogDebug(
+                "Cannot write error response because the request was aborted or the response has already started.");
 
             return;
         }

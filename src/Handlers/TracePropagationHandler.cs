@@ -3,14 +3,15 @@
 namespace ArturRios.Util.WebApi.Handlers;
 
 /// <summary>
-/// Propagates the W3C traceparent header on outgoing HttpClient requests.
-/// Register this as an HttpMessageHandler for typed/named HttpClients.
+///     Propagates the W3C traceparent header on outgoing HttpClient requests.
+///     Register this as an HttpMessageHandler for typed/named HttpClients.
 /// </summary>
 public class TracePropagationHandler : DelegatingHandler
 {
     private const string TraceParentHeader = "traceparent";
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        CancellationToken cancellationToken)
     {
         var activity = Activity.Current;
 

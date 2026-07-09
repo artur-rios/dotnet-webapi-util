@@ -69,10 +69,7 @@ public abstract class WebApiStartup(string[] args)
     public virtual void ConfigureWebApi() { }
     public virtual void StartServices() { }
 
-    public void AddLogging()
-    {
-        Builder.Services.AddLogging();
-    }
+    public void AddLogging() => Builder.Services.AddLogging();
 
     public void AddCustomLogging(List<LoggerConfiguration> loggerConfigurations)
     {
@@ -90,7 +87,7 @@ public abstract class WebApiStartup(string[] args)
     {
         Builder.Services.AddSingleton(sp =>
             new ConfigurationLoader(Builder.Configuration, Builder.Environment.EnvironmentName,
-                basePath: null, logger: sp.GetRequiredService<ILogger<ConfigurationLoader>>()));
+                null, sp.GetRequiredService<ILogger<ConfigurationLoader>>()));
 
         using var provider = Builder.Services.BuildServiceProvider();
         var configurationLoader = provider.GetRequiredService<ConfigurationLoader>();
