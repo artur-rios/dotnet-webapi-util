@@ -1,0 +1,844 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Dotnet WebApi Util</title><link>https://artur-rios.github.io/dotnet-webapi-util/</link><description>Recent content on Dotnet WebApi Util</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><managingEditor>arturdev@duck.com (Artur Rios)</managingEditor><webMaster>arturdev@duck.com (Artur Rios)</webMaster><atom:link href="https://artur-rios.github.io/dotnet-webapi-util/index.xml" rel="self" type="application/rss+xml"/><item><title>Architecture</title><link>https://artur-rios.github.io/dotnet-webapi-util/architecture/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/architecture/</guid><description>&lt;h1 id="architecture"&gt;Architecture&lt;/h1&gt;
+&lt;p&gt;This page shows how the pieces of &lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; fit together: the request pipeline, the
+security model, the response envelope, and the design principles that hold them together.&lt;/p&gt;
+&lt;h2 id="request-pipeline"&gt;Request pipeline&lt;/h2&gt;
+&lt;p&gt;The library is a thin layer around the standard ASP.NET Core pipeline. &lt;code&gt;WebApiStartup&lt;/code&gt; builds the
+&lt;code&gt;WebApplicationBuilder&lt;/code&gt;/&lt;code&gt;WebApplication&lt;/code&gt; and exposes &lt;code&gt;AddMiddlewares(Type[])&lt;/code&gt;, which registers each given
+middleware type on the app &lt;strong&gt;in the order supplied&lt;/strong&gt;, skipping any type that isn&amp;rsquo;t a &lt;code&gt;WebApiMiddleware&lt;/code&gt;.
+A typical setup registers the three built-in middlewares in this order:&lt;/p&gt;</description><content>&lt;h1 id="architecture"&gt;Architecture&lt;/h1&gt;
+&lt;p&gt;This page shows how the pieces of &lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; fit together: the request pipeline, the
+security model, the response envelope, and the design principles that hold them together.&lt;/p&gt;
+&lt;h2 id="request-pipeline"&gt;Request pipeline&lt;/h2&gt;
+&lt;p&gt;The library is a thin layer around the standard ASP.NET Core pipeline. &lt;code&gt;WebApiStartup&lt;/code&gt; builds the
+&lt;code&gt;WebApplicationBuilder&lt;/code&gt;/&lt;code&gt;WebApplication&lt;/code&gt; and exposes &lt;code&gt;AddMiddlewares(Type[])&lt;/code&gt;, which registers each given
+middleware type on the app &lt;strong&gt;in the order supplied&lt;/strong&gt;, skipping any type that isn&amp;rsquo;t a &lt;code&gt;WebApiMiddleware&lt;/code&gt;.
+A typical setup registers the three built-in middlewares in this order:&lt;/p&gt;
+&lt;pre class="mermaid"&gt;flowchart LR
+Client[&amp;#34;Client request&amp;#34;] --&amp;gt; Trace[&amp;#34;TraceActivityMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;assigns/propagates W3C traceparent&amp;lt;/i&amp;gt;&amp;#34;]
+Trace --&amp;gt; Exception[&amp;#34;ExceptionMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;catches unhandled exceptions&amp;lt;/i&amp;gt;&amp;#34;]
+Exception --&amp;gt; Jwt[&amp;#34;JwtMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;validates bearer token, attaches AuthenticatedUser&amp;lt;/i&amp;gt;&amp;#34;]
+Jwt --&amp;gt; Endpoint[&amp;#34;Controller / endpoint&amp;#34;]
+Endpoint --&amp;gt; Resolver[&amp;#34;ResponseResolver&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;Output envelope → ActionResult&amp;lt;/i&amp;gt;&amp;#34;]
+Resolver --&amp;gt; Client
+&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;WebApiMiddleware&lt;/code&gt; is an abstract marker base class with no members — its only job is to let
+&lt;code&gt;AddMiddlewares&lt;/code&gt; recognize which types are safe to register with &lt;code&gt;App.UseMiddleware(...)&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;AddMiddlewares([
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(TraceActivityMiddleware),
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(ExceptionMiddleware),
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(JwtMiddleware)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;]);
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Because registration order is registration order, &lt;code&gt;TraceActivityMiddleware&lt;/code&gt; runs first so the trace id
+is available to everything downstream (including exception logging), &lt;code&gt;ExceptionMiddleware&lt;/code&gt; runs next so
+it can catch exceptions thrown by authentication or the endpoint itself, and &lt;code&gt;JwtMiddleware&lt;/code&gt; runs last of
+the three so only requests that pass tracing/exception setup pay for token validation.&lt;/p&gt;
+&lt;p&gt;See &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt; for what &lt;code&gt;TraceActivityMiddleware&lt;/code&gt; and
+&lt;code&gt;ExceptionMiddleware&lt;/code&gt; do in detail, and &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration/"&gt;Configuration&lt;/a&gt; for the full &lt;code&gt;WebApiStartup&lt;/code&gt;
+lifecycle.&lt;/p&gt;
+&lt;h2 id="security-model"&gt;Security model&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;JwtMiddleware&lt;/code&gt; validates the bearer token on every request that isn&amp;rsquo;t a Swagger route or an
+&lt;code&gt;[AllowAnonymous]&lt;/code&gt; endpoint. What happens next depends on &lt;code&gt;JwtAuthenticationOptions.ValidationMode&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class="mermaid"&gt;flowchart TB
+Token[&amp;#34;Bearer token&amp;#34;] --&amp;gt; Verify{&amp;#34;Signature valid?&amp;#34;}
+Verify -- &amp;#34;no&amp;#34; --&amp;gt; R401[&amp;#34;401 Unauthorized&amp;#34;]
+Verify -- &amp;#34;yes&amp;#34; --&amp;gt; Mode{&amp;#34;ValidationMode&amp;#34;}
+Mode -- &amp;#34;ClaimsOnly (default)&amp;#34; --&amp;gt; Claims[&amp;#34;AuthenticatedUserFactory.FromToken&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;id + role claims, no lookup&amp;lt;/i&amp;gt;&amp;#34;]
+Mode -- &amp;#34;Revalidate&amp;#34; --&amp;gt; Provider[&amp;#34;IAuthenticationProvider.GetAuthenticatedUserById&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;resolved per-request from RequestServices&amp;lt;/i&amp;gt;&amp;#34;]
+Provider -.-&amp;gt; Cached[&amp;#34;CachedAuthenticationProvider&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;IMemoryCache, Ttl / CacheMisses&amp;lt;/i&amp;gt;&amp;#34;]
+Cached -.-&amp;gt; Provider
+Claims --&amp;gt; Items[&amp;#34;HttpContext.Items[User]&amp;#34;]
+Provider --&amp;gt; Items
+Items --&amp;gt; Authorize[&amp;#34;AuthorizeAttribute&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;401 if no user&amp;lt;/i&amp;gt;&amp;#34;]
+Authorize --&amp;gt; RoleReq[&amp;#34;RoleRequirementFilter&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;403 if role not authorized&amp;lt;/i&amp;gt;&amp;#34;]
+RoleReq --&amp;gt; Endpoint[&amp;#34;Controller action&amp;#34;]
+&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;ClaimsOnly&lt;/code&gt; (the default) never touches a data store — the user is rebuilt straight from the token&amp;rsquo;s
+&lt;code&gt;id&lt;/code&gt; and &lt;code&gt;role&lt;/code&gt; claims, so authentication costs nothing beyond the signature check. &lt;code&gt;Revalidate&lt;/code&gt; instead
+resolves &lt;code&gt;IAuthenticationProvider&lt;/code&gt; from the current request&amp;rsquo;s &lt;code&gt;HttpContext.RequestServices&lt;/code&gt; and calls
+&lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; on every request, trading a lookup for freshness. &lt;code&gt;CachedAuthenticationProvider&lt;/code&gt;
+sits transparently in front of any &lt;code&gt;IAuthenticationProvider&lt;/code&gt; (registered via
+&lt;code&gt;AddCachedAuthenticationProvider&amp;lt;T&amp;gt;&lt;/code&gt;) to absorb repeated lookups of the same user within a short TTL,
+without either mode needing to know it&amp;rsquo;s there.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;AuthorizeAttribute&lt;/code&gt; and &lt;code&gt;RoleRequirementFilter&lt;/code&gt; both read the same &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; slot that
+&lt;code&gt;JwtMiddleware&lt;/code&gt; populates, and both honor &lt;code&gt;[AllowAnonymous]&lt;/code&gt; by short-circuiting before checking it.&lt;/p&gt;
+&lt;p&gt;See &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security/"&gt;Security&lt;/a&gt; for the full authentication and authorization reference.&lt;/p&gt;
+&lt;h2 id="response-envelopes"&gt;Response envelopes&lt;/h2&gt;
+&lt;p&gt;Endpoints return an &lt;code&gt;ArturRios.Output&lt;/code&gt; envelope rather than throwing on failure. &lt;code&gt;ProcessOutput&lt;/code&gt; carries
+success/error/message state; &lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt; adds a typed payload on top of it:&lt;/p&gt;
+&lt;pre class="mermaid"&gt;classDiagram
+class ProcessOutput {
++bool Success
++List~string~ Messages
++List~string~ Errors
++WithError(string) ProcessOutput
+}
+class DataOutput~T~ {
++T Data
++WithData(T) DataOutput~T~
+}
+class PaginatedOutput~T~ {
++int Page
++int PageSize
++int TotalCount
+}
+ProcessOutput &amp;lt;|-- DataOutput
+DataOutput &amp;lt;|-- PaginatedOutput
+&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;ResponseResolver.Resolve(...)&lt;/code&gt; maps any of &lt;code&gt;ProcessOutput&lt;/code&gt;, &lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt; or &lt;code&gt;PaginatedOutput&amp;lt;T&amp;gt;&lt;/code&gt; onto
+an &lt;code&gt;ActionResult&lt;/code&gt;, defaulting the HTTP status to 200 when &lt;code&gt;Success&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt; and 400 otherwise, unless an
+explicit &lt;code&gt;statusCode&lt;/code&gt; is supplied:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[HttpGet(&amp;#34;{id:int}&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; ActionResult&amp;lt;DataOutput&amp;lt;UserDto?&amp;gt;&amp;gt; GetById(&lt;span style="color:#66d9ef"&gt;int&lt;/span&gt; id)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; DataOutput&amp;lt;UserDto?&amp;gt; output = _userService.GetById(id);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; ResponseResolver.Resolve(output);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;See &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses/"&gt;Responses&lt;/a&gt; for the full mapping reference.&lt;/p&gt;
+&lt;h2 id="design-principles"&gt;Design principles&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Envelopes, not exceptions.&lt;/strong&gt; Endpoints report failure through &lt;code&gt;ProcessOutput&lt;/code&gt;/&lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt; and let
+&lt;code&gt;ResponseResolver&lt;/code&gt; pick the status code; &lt;code&gt;ExceptionMiddleware&lt;/code&gt; is the safety net for anything that still
+escapes as a thrown exception, not the primary error-reporting path.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Stateless by default, revalidating when you need it.&lt;/strong&gt; &lt;code&gt;JwtValidationMode.ClaimsOnly&lt;/code&gt; is the default
+because most requests don&amp;rsquo;t need a fresh database read on every call; &lt;code&gt;Revalidate&lt;/code&gt; (optionally cached)
+is there for the cases where staleness — instead of an expired token — is the risk you can&amp;rsquo;t accept.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Small, focused middlewares.&lt;/strong&gt; Each of &lt;code&gt;TraceActivityMiddleware&lt;/code&gt;, &lt;code&gt;ExceptionMiddleware&lt;/code&gt; and
+&lt;code&gt;JwtMiddleware&lt;/code&gt; does exactly one thing and derives from the &lt;code&gt;WebApiMiddleware&lt;/code&gt; marker so it can be
+composed via &lt;code&gt;AddMiddlewares&lt;/code&gt; in whatever order a given host needs.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Consistent &lt;code&gt;InvokeAsync&lt;/code&gt;.&lt;/strong&gt; Every middleware follows the standard ASP.NET Core convention — a
+constructor capturing &lt;code&gt;RequestDelegate next&lt;/code&gt; plus other dependencies, and a single &lt;code&gt;InvokeAsync(HttpContext)&lt;/code&gt;
+method — so custom middlewares slot into &lt;code&gt;AddMiddlewares&lt;/code&gt; the same way the built-in ones do.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;DI-first.&lt;/strong&gt; Dependencies such as &lt;code&gt;IAuthenticationProvider&lt;/code&gt;, &lt;code&gt;JwtAuthenticationOptions&lt;/code&gt; and
+&lt;code&gt;SettingsProvider&lt;/code&gt; are resolved through the container (constructor injection or, for per-request
+freshness, &lt;code&gt;HttpContext.RequestServices&lt;/code&gt;) rather than passed around manually.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration"&gt;Configuration&lt;/a&gt;&lt;/strong&gt; — the &lt;code&gt;WebApiStartup&lt;/code&gt; lifecycle and &lt;code&gt;WebApiParameters&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security"&gt;Security&lt;/a&gt;&lt;/strong&gt; — JWT validation modes, caching, and role-based authorization in depth.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — exception handling and distributed
+tracing.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/http-client"&gt;HTTP Client&lt;/a&gt;&lt;/strong&gt; — building typed clients on top of &lt;code&gt;BaseWebApiClient&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — the full &lt;code&gt;ResponseResolver&lt;/code&gt; mapping reference.&lt;/li&gt;
+&lt;/ul&gt;</content></item><item><title>Configuration</title><link>https://artur-rios.github.io/dotnet-webapi-util/configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/configuration/</guid><description>&lt;h1 id="configuration"&gt;Configuration&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;WebApiStartup&lt;/code&gt; is the abstract base class you derive from to bootstrap an ASP.NET Core host:
+configuration loading, logging, Swagger, the middleware pipeline and the invalid-model-state response all
+go through a small set of methods on it, some of which you must implement and some of which are optional
+hooks.&lt;/p&gt;
+&lt;h2 id="the-lifecycle"&gt;The lifecycle&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;flowchart TB
+New[&amp;#34;new Startup(args)&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;builds WebApplicationBuilder + WebApiParameters&amp;lt;/i&amp;gt;&amp;#34;] --&amp;gt; Build[&amp;#34;Build() — abstract, you implement it&amp;#34;]
+Build --&amp;gt; LoadConfig[&amp;#34;LoadConfiguration()&amp;#34;]
+Build --&amp;gt; Logging[&amp;#34;AddLogging() / AddCustomLogging(...)&amp;#34;]
+Build --&amp;gt; InvalidModel[&amp;#34;AddCustomInvalidModelStateResponse()&amp;#34;]
+Build --&amp;gt; SwaggerGen[&amp;#34;UseSwaggerGen(...)&amp;#34;]
+Build --&amp;gt; Deps[&amp;#34;AddDependencies() — virtual hook&amp;#34;]
+Build --&amp;gt; BuildApp[&amp;#34;BuildApp() — builds App from Builder&amp;#34;]
+Build --&amp;gt; ConfigureApp[&amp;#34;ConfigureApp() — abstract, you implement it&amp;#34;]
+ConfigureApp --&amp;gt; Middlewares[&amp;#34;AddMiddlewares([...])&amp;#34;]
+ConfigureApp --&amp;gt; Swagger[&amp;#34;UseSwagger(...)&amp;#34;]
+ConfigureApp --&amp;gt; Map[&amp;#34;App.MapControllers() / endpoints&amp;#34;]
+New --&amp;gt; Run[&amp;#34;Run() or BuildAndRun()&amp;#34;]
+&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;Build()&lt;/code&gt; and &lt;code&gt;ConfigureApp()&lt;/code&gt; are &lt;strong&gt;abstract&lt;/strong&gt; — you must implement both. Everything else on
+&lt;code&gt;WebApiStartup&lt;/code&gt; is either a plain helper method you call from inside them, or a &lt;strong&gt;virtual no-op hook&lt;/strong&gt;
+you can override:&lt;/p&gt;</description><content>&lt;h1 id="configuration"&gt;Configuration&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;WebApiStartup&lt;/code&gt; is the abstract base class you derive from to bootstrap an ASP.NET Core host:
+configuration loading, logging, Swagger, the middleware pipeline and the invalid-model-state response all
+go through a small set of methods on it, some of which you must implement and some of which are optional
+hooks.&lt;/p&gt;
+&lt;h2 id="the-lifecycle"&gt;The lifecycle&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;flowchart TB
+New[&amp;#34;new Startup(args)&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;builds WebApplicationBuilder + WebApiParameters&amp;lt;/i&amp;gt;&amp;#34;] --&amp;gt; Build[&amp;#34;Build() — abstract, you implement it&amp;#34;]
+Build --&amp;gt; LoadConfig[&amp;#34;LoadConfiguration()&amp;#34;]
+Build --&amp;gt; Logging[&amp;#34;AddLogging() / AddCustomLogging(...)&amp;#34;]
+Build --&amp;gt; InvalidModel[&amp;#34;AddCustomInvalidModelStateResponse()&amp;#34;]
+Build --&amp;gt; SwaggerGen[&amp;#34;UseSwaggerGen(...)&amp;#34;]
+Build --&amp;gt; Deps[&amp;#34;AddDependencies() — virtual hook&amp;#34;]
+Build --&amp;gt; BuildApp[&amp;#34;BuildApp() — builds App from Builder&amp;#34;]
+Build --&amp;gt; ConfigureApp[&amp;#34;ConfigureApp() — abstract, you implement it&amp;#34;]
+ConfigureApp --&amp;gt; Middlewares[&amp;#34;AddMiddlewares([...])&amp;#34;]
+ConfigureApp --&amp;gt; Swagger[&amp;#34;UseSwagger(...)&amp;#34;]
+ConfigureApp --&amp;gt; Map[&amp;#34;App.MapControllers() / endpoints&amp;#34;]
+New --&amp;gt; Run[&amp;#34;Run() or BuildAndRun()&amp;#34;]
+&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;Build()&lt;/code&gt; and &lt;code&gt;ConfigureApp()&lt;/code&gt; are &lt;strong&gt;abstract&lt;/strong&gt; — you must implement both. Everything else on
+&lt;code&gt;WebApiStartup&lt;/code&gt; is either a plain helper method you call from inside them, or a &lt;strong&gt;virtual no-op hook&lt;/strong&gt;
+you can override:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Member&lt;/th&gt;
+&lt;th&gt;Kind&lt;/th&gt;
+&lt;th&gt;Purpose&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Build()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;abstract&lt;/td&gt;
+&lt;td&gt;The full startup sequence: configuration, services, &lt;code&gt;BuildApp()&lt;/code&gt;, then &lt;code&gt;ConfigureApp()&lt;/code&gt;.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;ConfigureApp()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;abstract&lt;/td&gt;
+&lt;td&gt;Configures the built &lt;code&gt;App&lt;/code&gt;&amp;rsquo;s request pipeline (middlewares, Swagger UI, endpoint mapping).&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AddDependencies()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;virtual hook&lt;/td&gt;
+&lt;td&gt;Override to register your own services. No-op by default.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;ConfigureCors()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;virtual hook&lt;/td&gt;
+&lt;td&gt;Override to enable and configure CORS. No-op by default.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;ConfigureSecurity()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;virtual hook&lt;/td&gt;
+&lt;td&gt;Override to configure authentication/authorization services. No-op by default.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;ConfigureWebApi()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;virtual hook&lt;/td&gt;
+&lt;td&gt;Override to configure web-API-specific services (controllers, filters, etc). No-op by default.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;StartServices()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;virtual hook&lt;/td&gt;
+&lt;td&gt;Override to start background/hosted services. No-op by default.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;LoadConfiguration()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Loads &lt;code&gt;appsettings&lt;/code&gt;/env file per &lt;code&gt;WebApiParameters&lt;/code&gt; and registers &lt;code&gt;SettingsProvider&lt;/code&gt;/&lt;code&gt;EnvironmentProvider&lt;/code&gt;.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AddLogging()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Adds the default ASP.NET Core logging services.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AddCustomLogging(loggerConfigurations)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Replaces the default logging providers with a custom logger built from the given configurations.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AddMiddlewares(Type[])&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Registers each given middleware type on &lt;code&gt;App&lt;/code&gt;, in order, skipping any type that isn&amp;rsquo;t a &lt;code&gt;WebApiMiddleware&lt;/code&gt;.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AddCustomInvalidModelStateResponse()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Replaces ASP.NET Core&amp;rsquo;s default invalid-model-state response with a &lt;code&gt;DataOutput&amp;lt;string&amp;gt;&lt;/code&gt;-shaped 400.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;UseSwaggerGen(...)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Registers the Swagger generator, conditionally on the current environment.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;UseSwagger(...)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Enables the Swagger middleware (JSON + UI), conditionally on the current environment.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;BuildApp()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Builds &lt;code&gt;App&lt;/code&gt; from &lt;code&gt;Builder&lt;/code&gt;. Must run before &lt;code&gt;ConfigureApp()&lt;/code&gt; touches &lt;code&gt;App&lt;/code&gt;.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Run()&lt;/code&gt; / &lt;code&gt;BuildAndRun()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;helper&lt;/td&gt;
+&lt;td&gt;Runs the built app, or calls &lt;code&gt;Build()&lt;/code&gt; then &lt;code&gt;Run()&lt;/code&gt; in one call.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="a-minimal-startup"&gt;A minimal &lt;code&gt;Startup&lt;/code&gt;&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;Startup&lt;/span&gt;(&lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;[] args) : WebApiStartup(args)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;override&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;void&lt;/span&gt; Build()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; LoadConfiguration();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AddLogging();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AddCustomInvalidModelStateResponse();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; UseSwaggerGen(jwtAuthentication: &lt;span style="color:#66d9ef"&gt;true&lt;/span&gt;);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; Builder.Services.AddControllers();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AddDependencies();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; BuildApp();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; ConfigureApp();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;override&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;void&lt;/span&gt; ConfigureApp()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AddMiddlewares([
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(TraceActivityMiddleware),
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(ExceptionMiddleware),
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(JwtMiddleware)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; ]);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; UseSwagger();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; App.MapControllers();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;new&lt;/span&gt; Startup(args).BuildAndRun();
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;BuildApp()&lt;/code&gt; must run before &lt;code&gt;ConfigureApp()&lt;/code&gt;, since the pipeline configuration in &lt;code&gt;ConfigureApp()&lt;/code&gt;
+(&lt;code&gt;AddMiddlewares&lt;/code&gt;, &lt;code&gt;UseSwagger&lt;/code&gt;, endpoint mapping) operates on the built &lt;code&gt;App&lt;/code&gt;, not the &lt;code&gt;Builder&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id="webapiparameters--command-line-startup-args"&gt;&lt;code&gt;WebApiParameters&lt;/code&gt; — command-line startup args&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;WebApiParameters&lt;/code&gt; parses the process&amp;rsquo;s &lt;code&gt;args&lt;/code&gt; into a small set of properties, without any code changes
+required at the call site. Each argument is a &lt;code&gt;Key:Value&lt;/code&gt; pair; unrecognized or malformed entries are
+silently ignored, leaving the default in place:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Argument&lt;/th&gt;
+&lt;th&gt;Property&lt;/th&gt;
+&lt;th&gt;Default&lt;/th&gt;
+&lt;th&gt;Effect&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Environment:&amp;lt;name&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;EnvironmentName&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;&amp;quot;&amp;quot;&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Sets the environment name, if it&amp;rsquo;s a valid &lt;code&gt;EnvironmentType&lt;/code&gt; value.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;UseAppSetting:&amp;lt;bool&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;UseAppSettings&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;true&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Whether &lt;code&gt;LoadConfiguration()&lt;/code&gt; loads &lt;code&gt;appsettings.json&lt;/code&gt;.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;UseEnvFile:&amp;lt;bool&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;UseEnvFile&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;true&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Whether &lt;code&gt;LoadConfiguration()&lt;/code&gt; loads a &lt;code&gt;.env&lt;/code&gt; file.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;SwaggerEnvironments:[A,B]&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;SwaggerEnvironments&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;[]&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;The environment names in which Swagger is served (see below).&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;For example:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;Environment:Production UseAppSetting:false UseEnvFile:false SwaggerEnvironments:[Development,Staging]
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="swagger--enabled-per-environment"&gt;Swagger — enabled per environment&lt;/h2&gt;
+&lt;p&gt;Swagger is gated by &lt;strong&gt;environment name&lt;/strong&gt;, not by a simple on/off flag. &lt;code&gt;UseSwagger(allowedEnvironments)&lt;/code&gt;
+and &lt;code&gt;UseSwaggerGen(allowedEnvironments, ...)&lt;/code&gt; each decide whether to activate using this precedence:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;The &lt;code&gt;allowedEnvironments&lt;/code&gt; parameter passed directly to the call, if non-empty.&lt;/li&gt;
+&lt;li&gt;Otherwise, &lt;code&gt;WebApiParameters.GetSwaggerEnvironments()&lt;/code&gt; — the &lt;code&gt;SwaggerEnvironments:[...]&lt;/code&gt; CLI arg, if it
+parsed to at least one valid environment name.&lt;/li&gt;
+&lt;li&gt;Otherwise, the built-in default: &lt;code&gt;Development&lt;/code&gt; and &lt;code&gt;Local&lt;/code&gt;.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;UseSwaggerGen(jwtAuthentication: &lt;span style="color:#66d9ef"&gt;true&lt;/span&gt;); &lt;span style="color:#75715e"&gt;// uses the default/CLI-configured environments&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;UseSwagger([EnvironmentType.Development, EnvironmentType.Staging]); &lt;span style="color:#75715e"&gt;// explicit override&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Because &lt;code&gt;GetSwaggerEnvironments()&lt;/code&gt; always falls back to &lt;code&gt;[Development, Local]&lt;/code&gt; rather than returning an
+empty list, in practice Swagger&amp;rsquo;s on/off state is always decided by one of the first two rules — there
+is no separate &lt;code&gt;appsettings.json&lt;/code&gt; toggle you need to flip to turn Swagger on or off.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;AppSettingsKeys.SwaggerEnabled&lt;/code&gt; (&lt;code&gt;&amp;quot;Swagger:Enabled&amp;quot;&lt;/code&gt;) is a separate internal marker, and it is set only
+when you pass an explicit &lt;code&gt;SwaggerEnvironments:[...]&lt;/code&gt; argument that includes the current environment
+(the marker uses the raw argument, not the &lt;code&gt;[Development, Local]&lt;/code&gt; fallback). &lt;code&gt;JwtMiddleware&lt;/code&gt; reads this
+marker to recognize &lt;code&gt;/swagger&lt;/code&gt; routes and skip authentication on them. This means Swagger can be &lt;em&gt;served&lt;/em&gt;
+by default in &lt;code&gt;Development&lt;/code&gt;/&lt;code&gt;Local&lt;/code&gt; without the marker being set — in that case the &lt;code&gt;/swagger&lt;/code&gt;
+authentication bypass is not active unless you also pass the matching &lt;code&gt;SwaggerEnvironments:[...]&lt;/code&gt;
+argument.&lt;/p&gt;
+&lt;h2 id="logging"&gt;Logging&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;AddLogging()&lt;/code&gt; wires up the default ASP.NET Core logging providers. &lt;code&gt;AddCustomLogging(loggerConfigurations)&lt;/code&gt;
+instead clears the default providers and registers a custom logger (backed by &lt;code&gt;IStateLogger&lt;/code&gt;) built from
+the given &lt;code&gt;LoggerConfiguration&lt;/code&gt; list, with the minimum level set to &lt;code&gt;Trace&lt;/code&gt;. Use one or the other, not
+both.&lt;/p&gt;
+&lt;h2 id="invalid-model-state"&gt;Invalid model state&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;AddCustomInvalidModelStateResponse()&lt;/code&gt; replaces ASP.NET Core&amp;rsquo;s built-in &lt;code&gt;[ApiController]&lt;/code&gt; validation
+response with a &lt;code&gt;DataOutput&amp;lt;string&amp;gt;&lt;/code&gt;-shaped 400: each invalid model-binding parameter is turned into an
+error message of the form &lt;code&gt;Parameter: &amp;lt;name&amp;gt; | Error: &amp;lt;message&amp;gt;&lt;/code&gt;, collected on the envelope&amp;rsquo;s &lt;code&gt;Errors&lt;/code&gt;
+list, so validation failures come back in the same shape as any other failed &lt;code&gt;ResponseResolver.Resolve&lt;/code&gt;
+call.&lt;/p&gt;
+&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture"&gt;Architecture&lt;/a&gt;&lt;/strong&gt; — how the pipeline, security model and response envelopes fit
+together.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security"&gt;Security&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;ConfigureSecurity()&lt;/code&gt;, JWT validation modes, and role-based authorization.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — the built-in middlewares registered via
+&lt;code&gt;AddMiddlewares&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;ResponseResolver&lt;/code&gt; and the invalid-model-state envelope shape.&lt;/li&gt;
+&lt;/ul&gt;</content></item><item><title>HTTP Client</title><link>https://artur-rios.github.io/dotnet-webapi-util/http-client/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/http-client/</guid><description>&lt;h1 id="http-client"&gt;HTTP Client&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; gives you a thin base for typed clients that call another web API:
+&lt;code&gt;BaseWebApiClient&lt;/code&gt; owns a shared &lt;code&gt;HttpGateway&lt;/code&gt;, and &lt;code&gt;BaseWebApiClientRoute&lt;/code&gt; groups related endpoints
+under a base URL with helpers for authenticating and carrying the resulting bearer token.&lt;/p&gt;
+&lt;h2 id="basewebapiclient"&gt;&lt;code&gt;BaseWebApiClient&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;BaseWebApiClient&lt;/code&gt; is abstract and exposes a protected &lt;code&gt;HttpGateway Gateway&lt;/code&gt; that every route object uses
+to issue requests. It has two constructors:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;BaseWebApiClient(HttpClient httpClient)&lt;/code&gt;&lt;/strong&gt; — wraps an existing &lt;code&gt;HttpClient&lt;/code&gt;. &lt;strong&gt;Prefer this one&lt;/strong&gt;: it
+lets the client be created through &lt;code&gt;IHttpClientFactory&lt;/code&gt; (via &lt;code&gt;AddHttpClient&amp;lt;T&amp;gt;()&lt;/code&gt;), which manages the
+underlying &lt;code&gt;HttpClient&lt;/code&gt;&amp;rsquo;s lifetime and connection pooling for you and is what lets you attach message
+handlers like &lt;code&gt;TracePropagationHandler&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;BaseWebApiClient(string baseUrl)&lt;/code&gt;&lt;/strong&gt; — constructs its own &lt;code&gt;HttpClient&lt;/code&gt; with &lt;code&gt;BaseAddress = baseUrl&lt;/code&gt;.
+Simpler for quick/manual use, but you lose &lt;code&gt;IHttpClientFactory&lt;/code&gt;&amp;rsquo;s pooling and the ability to attach
+handlers through DI.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Both constructors call the abstract &lt;code&gt;SetRoutes()&lt;/code&gt; method before returning, so a derived class implements
+it to instantiate its route objects against the shared &lt;code&gt;Gateway&lt;/code&gt;:&lt;/p&gt;</description><content>&lt;h1 id="http-client"&gt;HTTP Client&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; gives you a thin base for typed clients that call another web API:
+&lt;code&gt;BaseWebApiClient&lt;/code&gt; owns a shared &lt;code&gt;HttpGateway&lt;/code&gt;, and &lt;code&gt;BaseWebApiClientRoute&lt;/code&gt; groups related endpoints
+under a base URL with helpers for authenticating and carrying the resulting bearer token.&lt;/p&gt;
+&lt;h2 id="basewebapiclient"&gt;&lt;code&gt;BaseWebApiClient&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;BaseWebApiClient&lt;/code&gt; is abstract and exposes a protected &lt;code&gt;HttpGateway Gateway&lt;/code&gt; that every route object uses
+to issue requests. It has two constructors:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;BaseWebApiClient(HttpClient httpClient)&lt;/code&gt;&lt;/strong&gt; — wraps an existing &lt;code&gt;HttpClient&lt;/code&gt;. &lt;strong&gt;Prefer this one&lt;/strong&gt;: it
+lets the client be created through &lt;code&gt;IHttpClientFactory&lt;/code&gt; (via &lt;code&gt;AddHttpClient&amp;lt;T&amp;gt;()&lt;/code&gt;), which manages the
+underlying &lt;code&gt;HttpClient&lt;/code&gt;&amp;rsquo;s lifetime and connection pooling for you and is what lets you attach message
+handlers like &lt;code&gt;TracePropagationHandler&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;BaseWebApiClient(string baseUrl)&lt;/code&gt;&lt;/strong&gt; — constructs its own &lt;code&gt;HttpClient&lt;/code&gt; with &lt;code&gt;BaseAddress = baseUrl&lt;/code&gt;.
+Simpler for quick/manual use, but you lose &lt;code&gt;IHttpClientFactory&lt;/code&gt;&amp;rsquo;s pooling and the ability to attach
+handlers through DI.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Both constructors call the abstract &lt;code&gt;SetRoutes()&lt;/code&gt; method before returning, so a derived class implements
+it to instantiate its route objects against the shared &lt;code&gt;Gateway&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;MyApiClient&lt;/span&gt; : BaseWebApiClient
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; AccountsRoute Accounts { &lt;span style="color:#66d9ef"&gt;get&lt;/span&gt;; &lt;span style="color:#66d9ef"&gt;private&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;set&lt;/span&gt;; } = &lt;span style="color:#66d9ef"&gt;null&lt;/span&gt;!;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; MyApiClient(HttpClient httpClient) : &lt;span style="color:#66d9ef"&gt;base&lt;/span&gt;(httpClient) { }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;protected&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;override&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;void&lt;/span&gt; SetRoutes()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; Accounts = &lt;span style="color:#66d9ef"&gt;new&lt;/span&gt; AccountsRoute(Gateway);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="basewebapiclientroute"&gt;&lt;code&gt;BaseWebApiClientRoute&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;BaseWebApiClientRoute(HttpGateway gateway)&lt;/code&gt; is the base for a group of related routes on the remote API.
+It exposes:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;abstract string BaseUrl&lt;/code&gt;&lt;/strong&gt; — the base path this route group is mounted under (e.g. &lt;code&gt;/accounts&lt;/code&gt;).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticateAsync(Credentials credentials, string authRoute)&lt;/code&gt;&lt;/strong&gt; — posts &lt;code&gt;credentials&lt;/code&gt; to &lt;code&gt;authRoute&lt;/code&gt;
+via the shared &lt;code&gt;Gateway&lt;/code&gt; and returns the resulting &lt;code&gt;Authentication&lt;/code&gt;. Throws &lt;code&gt;WebApiClientException&lt;/code&gt; if
+the response comes back with no body.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Authorize(string authToken)&lt;/code&gt;&lt;/strong&gt; — sets &lt;code&gt;Gateway.Client.DefaultRequestHeaders.Authorization&lt;/code&gt; to a
+&lt;code&gt;Bearer&lt;/code&gt; header carrying &lt;code&gt;authToken&lt;/code&gt;. This is a plain &lt;strong&gt;assignment&lt;/strong&gt;, so it&amp;rsquo;s &lt;strong&gt;idempotent&lt;/strong&gt; — calling
+it again (e.g. after re-authenticating) simply replaces the previous header rather than accumulating
+anything.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticateAndAuthorizeAsync(Credentials credentials, string authRoute)&lt;/code&gt;&lt;/strong&gt; — calls
+&lt;code&gt;AuthenticateAsync&lt;/code&gt; then &lt;code&gt;Authorize&lt;/code&gt; with the returned token, in one call.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;AccountsRoute&lt;/span&gt;(HttpGateway gateway) : BaseWebApiClientRoute(gateway)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;override&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; BaseUrl =&amp;gt; &lt;span style="color:#e6db74"&gt;&amp;#34;/accounts&amp;#34;&lt;/span&gt;;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; Task LoginAsync(Credentials credentials) =&amp;gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AuthenticateAndAuthorizeAsync(credentials, &lt;span style="color:#e6db74"&gt;$&amp;#34;{BaseUrl}/login&amp;#34;&lt;/span&gt;);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;After &lt;code&gt;LoginAsync&lt;/code&gt; completes, every subsequent call made through the shared &lt;code&gt;Gateway&lt;/code&gt; — from &lt;code&gt;Accounts&lt;/code&gt;
+or any other route object on the same client — carries the &lt;code&gt;Authorization: Bearer&lt;/code&gt; header, since they all
+share the same underlying &lt;code&gt;HttpClient&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id="webapiclientexception"&gt;&lt;code&gt;WebApiClientException&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;A plain &lt;code&gt;Exception&lt;/code&gt; subclass raised when a &lt;code&gt;BaseWebApiClientRoute&lt;/code&gt; operation can&amp;rsquo;t complete — currently,
+only when &lt;code&gt;AuthenticateAsync&lt;/code&gt; gets a response with no body. Catch it around login calls if you want to
+distinguish &amp;ldquo;the remote API is unreachable/malformed&amp;rdquo; from a normal authentication failure surfaced
+through the &lt;code&gt;Authentication.Valid&lt;/code&gt; flag.&lt;/p&gt;
+&lt;h2 id="pairing-with-tracepropagationhandler"&gt;Pairing with &lt;code&gt;TracePropagationHandler&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;Because the &lt;code&gt;HttpClient&lt;/code&gt;-based constructor is built for &lt;code&gt;IHttpClientFactory&lt;/code&gt;, you can attach
+&lt;code&gt;TracePropagationHandler&lt;/code&gt; (see &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;) so every
+outgoing call from the client carries the current request&amp;rsquo;s W3C trace id:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddTransient&amp;lt;TracePropagationHandler&amp;gt;();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddHttpClient&amp;lt;MyApiClient&amp;gt;()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; .AddHttpMessageHandler&amp;lt;TracePropagationHandler&amp;gt;();
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;pre class="mermaid"&gt;flowchart LR
+Ctor[&amp;#34;MyApiClient(HttpClient)&amp;#34;] --&amp;gt; SetRoutes[&amp;#34;SetRoutes()&amp;#34;]
+SetRoutes --&amp;gt; Accounts[&amp;#34;AccountsRoute(Gateway)&amp;#34;]
+Accounts -- &amp;#34;AuthenticateAndAuthorizeAsync&amp;#34; --&amp;gt; Login[&amp;#34;POST /accounts/login&amp;#34;]
+Login -- &amp;#34;Authentication.Token&amp;#34; --&amp;gt; Authorize[&amp;#34;Authorize(token)&amp;#34;]
+Authorize --&amp;gt; Header[&amp;#34;Gateway.Client default Authorization header&amp;#34;]
+Header --&amp;gt; Calls[&amp;#34;Subsequent calls via Gateway&amp;#34;]
+Calls -- &amp;#34;TracePropagationHandler&amp;#34; --&amp;gt; Downstream[&amp;#34;Downstream API&amp;#34;]
+&lt;/pre&gt;
+&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;TracePropagationHandler&lt;/code&gt; and the trace
+id it propagates.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security"&gt;Security&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;Credentials&lt;/code&gt;, &lt;code&gt;Authentication&lt;/code&gt; and the login flow this client typically
+calls into.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — the &lt;code&gt;ArturRios.Output&lt;/code&gt; envelopes returned by the APIs these clients call.&lt;/li&gt;
+&lt;/ul&gt;</content></item><item><title>Middleware &amp; Diagnostics</title><link>https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/</guid><description>&lt;h1 id="middleware--diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; ships two request-pipeline middlewares — &lt;code&gt;TraceActivityMiddleware&lt;/code&gt; and
+&lt;code&gt;ExceptionMiddleware&lt;/code&gt; — plus &lt;code&gt;TracePropagationHandler&lt;/code&gt;, a &lt;code&gt;DelegatingHandler&lt;/code&gt; that carries the same
+trace id onto outgoing &lt;code&gt;HttpClient&lt;/code&gt; calls. (The third pipeline middleware, &lt;code&gt;JwtMiddleware&lt;/code&gt;, is covered
+on the &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security/"&gt;Security&lt;/a&gt; page.) The middlewares are registered through &lt;code&gt;AddMiddlewares&lt;/code&gt;, as
+referenced in &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture/"&gt;Architecture&lt;/a&gt; and &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration/"&gt;Configuration&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="webapimiddleware-and-registration-order"&gt;&lt;code&gt;WebApiMiddleware&lt;/code&gt; and registration order&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;WebApiMiddleware&lt;/code&gt; is an abstract marker base class with no members. Its only job is letting
+&lt;code&gt;WebApiStartup.AddMiddlewares(Type[])&lt;/code&gt; recognize which types it&amp;rsquo;s safe to register with
+&lt;code&gt;App.UseMiddleware(...)&lt;/code&gt; — any type in the array that isn&amp;rsquo;t a subclass of &lt;code&gt;WebApiMiddleware&lt;/code&gt; is silently
+skipped. Registration happens &lt;strong&gt;in the order given&lt;/strong&gt;:&lt;/p&gt;</description><content>&lt;h1 id="middleware--diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; ships two request-pipeline middlewares — &lt;code&gt;TraceActivityMiddleware&lt;/code&gt; and
+&lt;code&gt;ExceptionMiddleware&lt;/code&gt; — plus &lt;code&gt;TracePropagationHandler&lt;/code&gt;, a &lt;code&gt;DelegatingHandler&lt;/code&gt; that carries the same
+trace id onto outgoing &lt;code&gt;HttpClient&lt;/code&gt; calls. (The third pipeline middleware, &lt;code&gt;JwtMiddleware&lt;/code&gt;, is covered
+on the &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security/"&gt;Security&lt;/a&gt; page.) The middlewares are registered through &lt;code&gt;AddMiddlewares&lt;/code&gt;, as
+referenced in &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture/"&gt;Architecture&lt;/a&gt; and &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration/"&gt;Configuration&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="webapimiddleware-and-registration-order"&gt;&lt;code&gt;WebApiMiddleware&lt;/code&gt; and registration order&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;WebApiMiddleware&lt;/code&gt; is an abstract marker base class with no members. Its only job is letting
+&lt;code&gt;WebApiStartup.AddMiddlewares(Type[])&lt;/code&gt; recognize which types it&amp;rsquo;s safe to register with
+&lt;code&gt;App.UseMiddleware(...)&lt;/code&gt; — any type in the array that isn&amp;rsquo;t a subclass of &lt;code&gt;WebApiMiddleware&lt;/code&gt; is silently
+skipped. Registration happens &lt;strong&gt;in the order given&lt;/strong&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;AddMiddlewares([
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(TraceActivityMiddleware), &lt;span style="color:#75715e"&gt;// assigns/propagates a W3C trace id&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(ExceptionMiddleware), &lt;span style="color:#75715e"&gt;// turns unhandled exceptions into a JSON error envelope&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;typeof&lt;/span&gt;(JwtMiddleware)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;]);
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;TraceActivityMiddleware&lt;/code&gt; runs first so the trace id is available to everything downstream, including
+exception logging; &lt;code&gt;ExceptionMiddleware&lt;/code&gt; runs next so it can catch exceptions thrown by authentication or
+the endpoint itself; &lt;code&gt;JwtMiddleware&lt;/code&gt; (see &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/security/"&gt;Security&lt;/a&gt;) runs last of the three.&lt;/p&gt;
+&lt;h2 id="exceptionmiddleware"&gt;&lt;code&gt;ExceptionMiddleware&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;ExceptionMiddleware.InvokeAsync&lt;/code&gt; wraps the rest of the pipeline in a try/catch:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Client-initiated cancellations&lt;/strong&gt; — an &lt;code&gt;OperationCanceledException&lt;/code&gt; or &lt;code&gt;TaskCanceledException&lt;/code&gt; caught
+while &lt;code&gt;httpContext.RequestAborted.IsCancellationRequested&lt;/code&gt; is true is logged at &lt;strong&gt;Debug&lt;/strong&gt; level
+(&lt;code&gt;&amp;quot;Request was canceled by the client...&amp;quot;&lt;/code&gt;) and swallowed. No response is written, since there&amp;rsquo;s no
+client left to receive one.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Everything else&lt;/strong&gt; falls through to a single structured &lt;code&gt;logger.LogError(exception, &amp;quot;Unhandled exception while processing the request.&amp;quot;)&lt;/code&gt; call, followed by an HTTP 500 response — unless the response
+has already started or the request was aborted, in which case it logs at Debug and returns without
+writing anything.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The 500 response body is a JSON &lt;code&gt;DataOutput&amp;lt;string&amp;gt;&lt;/code&gt; envelope. By default its &lt;code&gt;Messages&lt;/code&gt; carry a single
+&lt;strong&gt;generic&lt;/strong&gt; message — &lt;code&gt;&amp;quot;Internal server error, please try again later&amp;quot;&lt;/code&gt; — so internal exception details
+are never leaked to the client. The one exception: if the thrown exception is a &lt;code&gt;CustomException&lt;/code&gt;, its
+own &lt;code&gt;Messages&lt;/code&gt; are returned instead, letting application code surface a deliberate, safe-to-show error
+through the same envelope shape &lt;code&gt;ResponseResolver&lt;/code&gt; uses everywhere else (see &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses/"&gt;Responses&lt;/a&gt;).&lt;/p&gt;
+&lt;p&gt;The response body is serialized with &lt;code&gt;JsonConvert.SerializeObject(output)&lt;/code&gt; (Newtonsoft, default casing),
+so a generic 500 looks like:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-json" data-lang="json"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#f92672"&gt;&amp;#34;Success&amp;#34;&lt;/span&gt;: &lt;span style="color:#66d9ef"&gt;false&lt;/span&gt;,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#f92672"&gt;&amp;#34;Data&amp;#34;&lt;/span&gt;: &lt;span style="color:#e6db74"&gt;&amp;#34;&amp;#34;&lt;/span&gt;,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#f92672"&gt;&amp;#34;Messages&amp;#34;&lt;/span&gt;: [&lt;span style="color:#e6db74"&gt;&amp;#34;Internal server error, please try again later&amp;#34;&lt;/span&gt;],
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#f92672"&gt;&amp;#34;Errors&amp;#34;&lt;/span&gt;: []
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="traceactivitymiddleware"&gt;&lt;code&gt;TraceActivityMiddleware&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;TraceActivityMiddleware&lt;/code&gt; ensures every request is associated with a W3C-format &lt;code&gt;Activity&lt;/code&gt;. The W3C
+&lt;code&gt;Activity.DefaultIdFormat&lt;/code&gt;/&lt;code&gt;Activity.ForceDefaultIdFormat&lt;/code&gt; configuration is set &lt;strong&gt;once&lt;/strong&gt;, in a static
+constructor — not on every request.&lt;/p&gt;
+&lt;p&gt;For each request, &lt;code&gt;InvokeAsync&lt;/code&gt;:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Reuses &lt;code&gt;Activity.Current&lt;/code&gt; if one already exists, or starts a new &lt;code&gt;&amp;quot;ServerReceive&amp;quot;&lt;/code&gt; activity otherwise.&lt;/li&gt;
+&lt;li&gt;Sets &lt;code&gt;context.TraceIdentifier&lt;/code&gt; and &lt;code&gt;context.Items[&amp;quot;TraceId&amp;quot;]&lt;/code&gt; to the activity&amp;rsquo;s trace id.&lt;/li&gt;
+&lt;li&gt;Writes a &lt;code&gt;traceparent&lt;/code&gt; response header formatted as &lt;code&gt;00-{traceId}-{spanId}-{flags}&lt;/code&gt; (the standard W3C
+trace-context format), so callers can correlate their request with the server-side trace even if they
+didn&amp;rsquo;t originate it.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;pre class="mermaid"&gt;flowchart LR
+Req[&amp;#34;Incoming request&amp;#34;] --&amp;gt; Check{&amp;#34;Activity.Current?&amp;#34;}
+Check -- &amp;#34;exists&amp;#34; --&amp;gt; Reuse[&amp;#34;Reuse it&amp;#34;]
+Check -- &amp;#34;none&amp;#34; --&amp;gt; New[&amp;#34;Start new ServerReceive activity&amp;#34;]
+Reuse --&amp;gt; Set[&amp;#34;context.TraceIdentifier / Items[TraceId]&amp;#34;]
+New --&amp;gt; Set
+Set --&amp;gt; Header[&amp;#34;Response header: traceparent&amp;#34;]
+Header --&amp;gt; Next[&amp;#34;Next middleware / endpoint&amp;#34;]
+&lt;/pre&gt;
+&lt;h2 id="tracepropagationhandler"&gt;&lt;code&gt;TracePropagationHandler&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;TracePropagationHandler&lt;/code&gt; is a &lt;code&gt;DelegatingHandler&lt;/code&gt; for outgoing typed/named &lt;code&gt;HttpClient&lt;/code&gt;s. When
+&lt;code&gt;Activity.Current&lt;/code&gt; is set (typically because &lt;code&gt;TraceActivityMiddleware&lt;/code&gt; is running the current request)
+and the outgoing request doesn&amp;rsquo;t already carry a &lt;code&gt;traceparent&lt;/code&gt; header, it adds one built from the same
+&lt;code&gt;00-{traceId}-{spanId}-{flags}&lt;/code&gt; format — so a call your service makes to another service continues the
+same distributed trace instead of starting a new one.&lt;/p&gt;
+&lt;p&gt;Register it as a message handler on any typed &lt;code&gt;HttpClient&lt;/code&gt; you want the trace id to flow through:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddTransient&amp;lt;TracePropagationHandler&amp;gt;();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddHttpClient&amp;lt;MyApiClient&amp;gt;()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; .AddHttpMessageHandler&amp;lt;TracePropagationHandler&amp;gt;();
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;See &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/http-client/"&gt;HTTP Client&lt;/a&gt; for how &lt;code&gt;BaseWebApiClient&lt;/code&gt; fits into that registration.&lt;/p&gt;
+&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture"&gt;Architecture&lt;/a&gt;&lt;/strong&gt; — how these middlewares sit relative to &lt;code&gt;JwtMiddleware&lt;/code&gt; and
+&lt;code&gt;ResponseResolver&lt;/code&gt; in the full pipeline.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration"&gt;Configuration&lt;/a&gt;&lt;/strong&gt; — registering middlewares via &lt;code&gt;AddMiddlewares&lt;/code&gt; as part of
+&lt;code&gt;WebApiStartup&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/http-client"&gt;HTTP Client&lt;/a&gt;&lt;/strong&gt; — pairing &lt;code&gt;TracePropagationHandler&lt;/code&gt; with &lt;code&gt;BaseWebApiClient&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — the &lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt;/&lt;code&gt;ProcessOutput&lt;/code&gt; envelopes &lt;code&gt;ExceptionMiddleware&lt;/code&gt; and
+&lt;code&gt;ResponseResolver&lt;/code&gt; both use.&lt;/li&gt;
+&lt;/ul&gt;</content></item><item><title>Responses</title><link>https://artur-rios.github.io/dotnet-webapi-util/responses/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/responses/</guid><description>&lt;h1 id="responses"&gt;Responses&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ResponseResolver&lt;/code&gt; is a static class that converts &lt;code&gt;ArturRios.Output&lt;/code&gt; envelopes — &lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt;,
+&lt;code&gt;ProcessOutput&lt;/code&gt;, and &lt;code&gt;PaginatedOutput&amp;lt;T&amp;gt;&lt;/code&gt; — into ASP.NET Core &lt;code&gt;ActionResult&lt;/code&gt;s, so a controller action
+never has to hand-pick a status code for the happy and unhappy paths itself.&lt;/p&gt;
+&lt;h2 id="resolve-overloads"&gt;&lt;code&gt;Resolve&lt;/code&gt; overloads&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;ResponseResolver.Resolve&lt;/code&gt; has three overloads, one per envelope type:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Overload&lt;/th&gt;
+&lt;th&gt;Returns&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Resolve&amp;lt;T&amp;gt;(DataOutput&amp;lt;T?&amp;gt; dataOutput, int? statusCode = null)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;ActionResult&amp;lt;DataOutput&amp;lt;T?&amp;gt;&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Resolve(ProcessOutput processOutput, int? statusCode = null)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;ActionResult&amp;lt;ProcessOutput&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Resolve&amp;lt;T&amp;gt;(PaginatedOutput&amp;lt;T&amp;gt; paginatedOutput, int? statusCode = null)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;ActionResult&amp;lt;PaginatedOutput&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Each wraps the envelope in an &lt;code&gt;ObjectResult&lt;/code&gt; whose &lt;code&gt;StatusCode&lt;/code&gt; is set from the resolved status code —
+none of the three re-shape or otherwise touch the envelope itself; the body returned to the client is the
+same object you passed in.&lt;/p&gt;</description><content>&lt;h1 id="responses"&gt;Responses&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ResponseResolver&lt;/code&gt; is a static class that converts &lt;code&gt;ArturRios.Output&lt;/code&gt; envelopes — &lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt;,
+&lt;code&gt;ProcessOutput&lt;/code&gt;, and &lt;code&gt;PaginatedOutput&amp;lt;T&amp;gt;&lt;/code&gt; — into ASP.NET Core &lt;code&gt;ActionResult&lt;/code&gt;s, so a controller action
+never has to hand-pick a status code for the happy and unhappy paths itself.&lt;/p&gt;
+&lt;h2 id="resolve-overloads"&gt;&lt;code&gt;Resolve&lt;/code&gt; overloads&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;ResponseResolver.Resolve&lt;/code&gt; has three overloads, one per envelope type:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Overload&lt;/th&gt;
+&lt;th&gt;Returns&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Resolve&amp;lt;T&amp;gt;(DataOutput&amp;lt;T?&amp;gt; dataOutput, int? statusCode = null)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;ActionResult&amp;lt;DataOutput&amp;lt;T?&amp;gt;&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Resolve(ProcessOutput processOutput, int? statusCode = null)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;ActionResult&amp;lt;ProcessOutput&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Resolve&amp;lt;T&amp;gt;(PaginatedOutput&amp;lt;T&amp;gt; paginatedOutput, int? statusCode = null)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;ActionResult&amp;lt;PaginatedOutput&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Each wraps the envelope in an &lt;code&gt;ObjectResult&lt;/code&gt; whose &lt;code&gt;StatusCode&lt;/code&gt; is set from the resolved status code —
+none of the three re-shape or otherwise touch the envelope itself; the body returned to the client is the
+same object you passed in.&lt;/p&gt;
+&lt;h2 id="default-status-mapping"&gt;Default status mapping&lt;/h2&gt;
+&lt;p&gt;Every overload resolves its HTTP status the same way:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;statusCode&lt;/code&gt; supplied&lt;/strong&gt; — used as-is, regardless of the envelope&amp;rsquo;s &lt;code&gt;Success&lt;/code&gt; value.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;statusCode&lt;/code&gt; omitted&lt;/strong&gt; — defaults to &lt;strong&gt;200&lt;/strong&gt; when the envelope&amp;rsquo;s &lt;code&gt;Success&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt;, and &lt;strong&gt;400&lt;/strong&gt;
+otherwise.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre class="mermaid"&gt;flowchart LR
+Output[&amp;#34;DataOutput / ProcessOutput / PaginatedOutput&amp;#34;] --&amp;gt; Resolve[&amp;#34;ResponseResolver.Resolve(output, statusCode?)&amp;#34;]
+Resolve --&amp;gt; HasCode{&amp;#34;statusCode supplied?&amp;#34;}
+HasCode -- &amp;#34;yes&amp;#34; --&amp;gt; UseCode[&amp;#34;Use statusCode as-is&amp;#34;]
+HasCode -- &amp;#34;no&amp;#34; --&amp;gt; Success{&amp;#34;output.Success?&amp;#34;}
+Success -- &amp;#34;true&amp;#34; --&amp;gt; Ok[&amp;#34;200&amp;#34;]
+Success -- &amp;#34;false&amp;#34; --&amp;gt; Bad[&amp;#34;400&amp;#34;]
+UseCode --&amp;gt; Result[&amp;#34;ObjectResult&amp;#34;]
+Ok --&amp;gt; Result
+Bad --&amp;gt; Result
+&lt;/pre&gt;
+&lt;p&gt;This means a failed operation that should still return, say, a 404 or 409 rather than a generic 400 just
+needs an explicit &lt;code&gt;statusCode&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; ResponseResolver.Resolve(output, statusCode: &lt;span style="color:#ae81ff"&gt;404&lt;/span&gt;);
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="pairing-with-the-envelopes"&gt;Pairing with the envelopes&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;ResponseResolver&lt;/code&gt; is the last stop for the &amp;ldquo;envelopes, not exceptions&amp;rdquo; pattern the rest of the library
+follows (see &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture/"&gt;Architecture&lt;/a&gt;): application code builds a &lt;code&gt;ProcessOutput&lt;/code&gt; or
+&lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt; (&lt;code&gt;WithData&lt;/code&gt;, &lt;code&gt;WithError&lt;/code&gt;, etc.) to describe what happened, and &lt;code&gt;ResponseResolver&lt;/code&gt; is the
+single place that decides how that maps onto the HTTP response — so success and failure both flow through
+the same, predictable shape instead of being scattered across &lt;code&gt;Ok(...)&lt;/code&gt;/&lt;code&gt;BadRequest(...)&lt;/code&gt;/&lt;code&gt;NotFound(...)&lt;/code&gt;
+calls in every action. It pairs naturally with &lt;code&gt;AddCustomInvalidModelStateResponse()&lt;/code&gt; (see
+&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration/"&gt;Configuration&lt;/a&gt;), which shapes ASP.NET Core&amp;rsquo;s own model-validation 400 as a
+&lt;code&gt;DataOutput&amp;lt;string&amp;gt;&lt;/code&gt; so it looks identical to a &lt;code&gt;Resolve&lt;/code&gt;d failure.&lt;/p&gt;
+&lt;h2 id="controller-action-example"&gt;Controller-action example&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[HttpGet(&amp;#34;{id:int}&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; ActionResult&amp;lt;DataOutput&amp;lt;UserDto?&amp;gt;&amp;gt; GetById(&lt;span style="color:#66d9ef"&gt;int&lt;/span&gt; id)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; DataOutput&amp;lt;UserDto?&amp;gt; output = _userService.GetById(id);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; ResponseResolver.Resolve(output);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;_userService.GetById&lt;/code&gt; returns a &lt;code&gt;DataOutput&amp;lt;UserDto?&amp;gt;&lt;/code&gt; whose &lt;code&gt;Success&lt;/code&gt; reflects whether the user was
+found; &lt;code&gt;ResponseResolver.Resolve&lt;/code&gt; turns that straight into a 200 with the user payload or a 400 with the
+service&amp;rsquo;s error messages, with no branching in the action itself.&lt;/p&gt;
+&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture"&gt;Architecture&lt;/a&gt;&lt;/strong&gt; — where &lt;code&gt;ResponseResolver&lt;/code&gt; sits at the end of the request pipeline,
+and the envelope class hierarchy (&lt;code&gt;ProcessOutput&lt;/code&gt; → &lt;code&gt;DataOutput&amp;lt;T&amp;gt;&lt;/code&gt; → &lt;code&gt;PaginatedOutput&amp;lt;T&amp;gt;&lt;/code&gt;).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration"&gt;Configuration&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;AddCustomInvalidModelStateResponse()&lt;/code&gt;, which shapes validation
+failures the same way.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;ExceptionMiddleware&lt;/code&gt;, which returns the
+same &lt;code&gt;DataOutput&amp;lt;string&amp;gt;&lt;/code&gt; shape for unhandled exceptions that never reach a &lt;code&gt;Resolve&lt;/code&gt; call.&lt;/li&gt;
+&lt;/ul&gt;</content></item><item><title>Security</title><link>https://artur-rios.github.io/dotnet-webapi-util/security/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/security/</guid><description>&lt;h1 id="security"&gt;Security&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; ships JWT authentication and role-based authorization as a small, composable set
+of pieces: &lt;code&gt;JwtMiddleware&lt;/code&gt; validates the token and attaches the user, a pair of attributes/filters declare
+access rules, and &lt;code&gt;Credentials&lt;/code&gt;/&lt;code&gt;Authentication&lt;/code&gt; give you the record types for a login flow.&lt;/p&gt;
+&lt;h2 id="jwtmiddleware"&gt;&lt;code&gt;JwtMiddleware&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;JwtMiddleware&lt;/code&gt; runs once per request (see &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture/"&gt;Architecture&lt;/a&gt; for where it sits in the
+pipeline). For each request it:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Skips validation entirely for Swagger routes and for endpoints marked &lt;code&gt;[AllowAnonymous]&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;Extracts the bearer token from the &lt;code&gt;Authorization&lt;/code&gt; header. The scheme &lt;strong&gt;must&lt;/strong&gt; be &lt;code&gt;Bearer&lt;/code&gt;
+(case-insensitive) with a non-empty parameter — any other or malformed scheme is treated as no token.&lt;/li&gt;
+&lt;li&gt;Validates the token&amp;rsquo;s signature via &lt;code&gt;JwtHandler.IsTokenValidAsync&lt;/code&gt;. An invalid or missing token
+produces a 401 with an &lt;code&gt;&amp;quot;Invalid token&amp;quot;&lt;/code&gt; error.&lt;/li&gt;
+&lt;li&gt;Resolves an &lt;code&gt;AuthenticatedUser&lt;/code&gt; according to &lt;code&gt;JwtAuthenticationOptions.ValidationMode&lt;/code&gt; (below). Success
+attaches the user to &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; and calls the next middleware; failure writes a 401
+with a descriptive error.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="jwtvalidationmode--claimsonly-vs-revalidate"&gt;&lt;code&gt;JwtValidationMode&lt;/code&gt; — &lt;code&gt;ClaimsOnly&lt;/code&gt; vs &lt;code&gt;Revalidate&lt;/code&gt;&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;// Opt into per-request revalidation&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddSingleton(&lt;span style="color:#66d9ef"&gt;new&lt;/span&gt; JwtAuthenticationOptions
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; ValidationMode = JwtValidationMode.Revalidate
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;});
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;ClaimsOnly&lt;/code&gt; (default)&lt;/strong&gt; — &lt;code&gt;AuthenticatedUserFactory.FromToken&lt;/code&gt; rebuilds the user from the token&amp;rsquo;s
+&lt;code&gt;id&lt;/code&gt; and &lt;code&gt;role&lt;/code&gt; claims. No data store is queried, so authentication costs nothing beyond the signature
+check. The trade-off: because nothing is re-checked server-side, role changes and revocations only take
+effect once the token expires. Keep access-token lifetimes short and pair this mode with refresh
+tokens.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Revalidate&lt;/code&gt;&lt;/strong&gt; — the user id is read from the token, and &lt;code&gt;IAuthenticationProvider&lt;/code&gt; is resolved
+&lt;strong&gt;per-request&lt;/strong&gt; from &lt;code&gt;HttpContext.RequestServices&lt;/code&gt; (so it can be a scoped service) and its
+&lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; is called. This guarantees freshness — a deleted or role-changed user is
+rejected or updated on the very next request — at the cost of one lookup per request.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;If &lt;code&gt;JwtAuthenticationOptions&lt;/code&gt; isn&amp;rsquo;t registered, &lt;code&gt;JwtMiddleware&lt;/code&gt; falls back to a default instance, i.e.
+&lt;code&gt;ClaimsOnly&lt;/code&gt;.&lt;/p&gt;</description><content>&lt;h1 id="security"&gt;Security&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; ships JWT authentication and role-based authorization as a small, composable set
+of pieces: &lt;code&gt;JwtMiddleware&lt;/code&gt; validates the token and attaches the user, a pair of attributes/filters declare
+access rules, and &lt;code&gt;Credentials&lt;/code&gt;/&lt;code&gt;Authentication&lt;/code&gt; give you the record types for a login flow.&lt;/p&gt;
+&lt;h2 id="jwtmiddleware"&gt;&lt;code&gt;JwtMiddleware&lt;/code&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;JwtMiddleware&lt;/code&gt; runs once per request (see &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture/"&gt;Architecture&lt;/a&gt; for where it sits in the
+pipeline). For each request it:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Skips validation entirely for Swagger routes and for endpoints marked &lt;code&gt;[AllowAnonymous]&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;Extracts the bearer token from the &lt;code&gt;Authorization&lt;/code&gt; header. The scheme &lt;strong&gt;must&lt;/strong&gt; be &lt;code&gt;Bearer&lt;/code&gt;
+(case-insensitive) with a non-empty parameter — any other or malformed scheme is treated as no token.&lt;/li&gt;
+&lt;li&gt;Validates the token&amp;rsquo;s signature via &lt;code&gt;JwtHandler.IsTokenValidAsync&lt;/code&gt;. An invalid or missing token
+produces a 401 with an &lt;code&gt;&amp;quot;Invalid token&amp;quot;&lt;/code&gt; error.&lt;/li&gt;
+&lt;li&gt;Resolves an &lt;code&gt;AuthenticatedUser&lt;/code&gt; according to &lt;code&gt;JwtAuthenticationOptions.ValidationMode&lt;/code&gt; (below). Success
+attaches the user to &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; and calls the next middleware; failure writes a 401
+with a descriptive error.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="jwtvalidationmode--claimsonly-vs-revalidate"&gt;&lt;code&gt;JwtValidationMode&lt;/code&gt; — &lt;code&gt;ClaimsOnly&lt;/code&gt; vs &lt;code&gt;Revalidate&lt;/code&gt;&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;// Opt into per-request revalidation&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddSingleton(&lt;span style="color:#66d9ef"&gt;new&lt;/span&gt; JwtAuthenticationOptions
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; ValidationMode = JwtValidationMode.Revalidate
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;});
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;ClaimsOnly&lt;/code&gt; (default)&lt;/strong&gt; — &lt;code&gt;AuthenticatedUserFactory.FromToken&lt;/code&gt; rebuilds the user from the token&amp;rsquo;s
+&lt;code&gt;id&lt;/code&gt; and &lt;code&gt;role&lt;/code&gt; claims. No data store is queried, so authentication costs nothing beyond the signature
+check. The trade-off: because nothing is re-checked server-side, role changes and revocations only take
+effect once the token expires. Keep access-token lifetimes short and pair this mode with refresh
+tokens.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Revalidate&lt;/code&gt;&lt;/strong&gt; — the user id is read from the token, and &lt;code&gt;IAuthenticationProvider&lt;/code&gt; is resolved
+&lt;strong&gt;per-request&lt;/strong&gt; from &lt;code&gt;HttpContext.RequestServices&lt;/code&gt; (so it can be a scoped service) and its
+&lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; is called. This guarantees freshness — a deleted or role-changed user is
+rejected or updated on the very next request — at the cost of one lookup per request.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;If &lt;code&gt;JwtAuthenticationOptions&lt;/code&gt; isn&amp;rsquo;t registered, &lt;code&gt;JwtMiddleware&lt;/code&gt; falls back to a default instance, i.e.
+&lt;code&gt;ClaimsOnly&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id="caching-provider-lookups"&gt;Caching provider lookups&lt;/h2&gt;
+&lt;p&gt;When using &lt;code&gt;Revalidate&lt;/code&gt;, wrap your &lt;code&gt;IAuthenticationProvider&lt;/code&gt; with &lt;code&gt;CachedAuthenticationProvider&lt;/code&gt; so
+repeated lookups of the same user within a short window are served from an &lt;code&gt;IMemoryCache&lt;/code&gt; instead of
+hitting the store on every request:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddCachedAuthenticationProvider&amp;lt;MyAuthenticationProvider&amp;gt;(options =&amp;gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; options.Ttl = TimeSpan.FromSeconds(&lt;span style="color:#ae81ff"&gt;30&lt;/span&gt;); &lt;span style="color:#75715e"&gt;// default: 60s&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; options.CacheMisses = &lt;span style="color:#66d9ef"&gt;true&lt;/span&gt;; &lt;span style="color:#75715e"&gt;// also cache &amp;#34;user not found&amp;#34; (default: false)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;});
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;AddCachedAuthenticationProvider&amp;lt;TProvider&amp;gt;&lt;/code&gt; registers &lt;code&gt;TProvider&lt;/code&gt; (your concrete &lt;code&gt;IAuthenticationProvider&lt;/code&gt;
+implementation) as a scoped service, adds &lt;code&gt;IMemoryCache&lt;/code&gt;, and registers &lt;code&gt;IAuthenticationProvider&lt;/code&gt; itself
+as a &lt;code&gt;CachedAuthenticationProvider&lt;/code&gt; decorating &lt;code&gt;TProvider&lt;/code&gt;. &lt;code&gt;CachedAuthenticationProvider.GetAuthenticatedUserById&lt;/code&gt;
+checks the cache first (key &lt;code&gt;&amp;quot;auth:user:&amp;quot; + id&lt;/code&gt; by default, via &lt;code&gt;CacheKeyPrefix&lt;/code&gt;); on a miss it delegates
+to the inner provider and caches the result for &lt;code&gt;Ttl&lt;/code&gt;, but only caches a &lt;code&gt;null&lt;/code&gt; result (a miss) when
+&lt;code&gt;CacheMisses&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt;. This bounds staleness to the TTL while collapsing bursts of requests for the same
+user into a single store hit — &lt;code&gt;JwtMiddleware&lt;/code&gt; and your own code both see it as a plain
+&lt;code&gt;IAuthenticationProvider&lt;/code&gt; and don&amp;rsquo;t need to know caching is happening.&lt;/p&gt;
+&lt;h2 id="identity-types"&gt;Identity types&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticatedUser(int Id, int Role)&lt;/code&gt;&lt;/strong&gt; — the record attached to &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; after
+successful authentication, and returned by &lt;code&gt;IAuthenticationProvider.GetAuthenticatedUserById&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;TokenClaimKeys&lt;/code&gt;&lt;/strong&gt; — the claim key constants used on both ends of the token: &lt;code&gt;Id = &amp;quot;id&amp;quot;&lt;/code&gt;,
+&lt;code&gt;Role = &amp;quot;role&amp;quot;&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticationExtensions.ToTokenClaims(this AuthenticatedUser)&lt;/code&gt;&lt;/strong&gt; — converts an &lt;code&gt;AuthenticatedUser&lt;/code&gt;
+into a &lt;code&gt;Dictionary&amp;lt;string, string&amp;gt;&lt;/code&gt; keyed by &lt;code&gt;TokenClaimKeys&lt;/code&gt;, ready to hand to your JWT-issuing code
+when you build the token at login time.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticatedUserFactory.FromToken(string token)&lt;/code&gt;&lt;/strong&gt; — reads a token&amp;rsquo;s &lt;code&gt;id&lt;/code&gt;/&lt;code&gt;role&lt;/code&gt; claims (without
+validating its signature — callers must have already done that) and returns the reconstructed
+&lt;code&gt;AuthenticatedUser&lt;/code&gt;, or &lt;code&gt;null&lt;/code&gt; if the token can&amp;rsquo;t be read or is missing a numeric &lt;code&gt;id&lt;/code&gt; or &lt;code&gt;role&lt;/code&gt; claim.
+This is what &lt;code&gt;JwtMiddleware&lt;/code&gt; calls in &lt;code&gt;ClaimsOnly&lt;/code&gt; mode.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre class="mermaid"&gt;flowchart LR
+User[&amp;#34;AuthenticatedUser&amp;#34;] -- &amp;#34;ToTokenClaims()&amp;#34; --&amp;gt; Claims[&amp;#34;id / role claims&amp;#34;]
+Claims -- &amp;#34;embedded in JWT at login&amp;#34; --&amp;gt; Token[&amp;#34;Bearer token&amp;#34;]
+Token -- &amp;#34;AuthenticatedUserFactory.FromToken()&amp;#34; --&amp;gt; User2[&amp;#34;AuthenticatedUser&amp;#34;]
+&lt;/pre&gt;
+&lt;h2 id="declaring-access-rules"&gt;Declaring access rules&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[Authorize]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[RoleRequirement(1, 2)]&lt;/span&gt; &lt;span style="color:#75715e"&gt;// e.g. Admin, Manager&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;AccountsController&lt;/span&gt; : ControllerBase
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [AllowAnonymous]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [HttpPost(&amp;#34;login&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; IActionResult Login(Credentials credentials) { &lt;span style="color:#75715e"&gt;/* ... */&lt;/span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [HttpGet]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; IActionResult GetAll() { &lt;span style="color:#75715e"&gt;/* only roles 1 and 2 reach here */&lt;/span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;[Authorize]&lt;/code&gt;&lt;/strong&gt; — an &lt;code&gt;IAuthorizationFilter&lt;/code&gt; that checks &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt;; if it&amp;rsquo;s &lt;code&gt;null&lt;/code&gt;,
+the request short-circuits with a 401 (&lt;code&gt;{&amp;quot;message&amp;quot;: &amp;quot;Unauthorized&amp;quot;}&lt;/code&gt;). It first checks the action for
+&lt;code&gt;[AllowAnonymous]&lt;/code&gt; and returns immediately (no 401) if present.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;[RoleRequirement(params int[] authorizedRoles)]&lt;/code&gt;&lt;/strong&gt; — a &lt;code&gt;TypeFilterAttribute&lt;/code&gt; around
+&lt;code&gt;RoleRequirementFilter&lt;/code&gt;. It reads the same &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt;; if the user is present and its
+&lt;code&gt;Role&lt;/code&gt; is one of &lt;code&gt;authorizedRoles&lt;/code&gt;, the request proceeds, otherwise it short-circuits with a 403
+(a &lt;code&gt;ProcessOutput&lt;/code&gt; with the error &lt;code&gt;&amp;quot;You do not have permission to access this resource&amp;quot;&lt;/code&gt;). It also
+honors &lt;code&gt;[AllowAnonymous]&lt;/code&gt; — an anonymous-marked action returns immediately without a role check, even
+under &lt;code&gt;[RoleRequirement(...)]&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;[AllowAnonymous]&lt;/code&gt;&lt;/strong&gt; — a plain marker attribute; it doesn&amp;rsquo;t enforce anything itself, but
+&lt;code&gt;JwtMiddleware&lt;/code&gt;, &lt;code&gt;AuthorizeAttribute&lt;/code&gt; and &lt;code&gt;RoleRequirementFilter&lt;/code&gt; all check for it and skip their own
+enforcement when it&amp;rsquo;s present on the action.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Because both filters read &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; rather than re-validating the token themselves,
+&lt;code&gt;[Authorize]&lt;/code&gt;/&lt;code&gt;[RoleRequirement]&lt;/code&gt; only make sense downstream of &lt;code&gt;JwtMiddleware&lt;/code&gt; — see
+&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture/"&gt;Architecture&lt;/a&gt; for how the two fit together.&lt;/p&gt;
+&lt;h2 id="credentials-and-validation"&gt;&lt;code&gt;Credentials&lt;/code&gt; and validation&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;record&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;Credentials&lt;/span&gt;(&lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; Email, &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; Password);
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;CredentialsValidator&lt;/code&gt; (FluentValidation) enforces:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;Email&lt;/code&gt; — not empty, and a valid email address format.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Password&lt;/code&gt; — not empty, minimum length &lt;strong&gt;8&lt;/strong&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;CredentialsValidator&lt;/span&gt; : AbstractValidator&amp;lt;Credentials&amp;gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; CredentialsValidator()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; RuleFor(credentials =&amp;gt; credentials.Email).NotEmpty().EmailAddress();
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; RuleFor(credentials =&amp;gt; credentials.Password).NotEmpty().MinimumLength(&lt;span style="color:#ae81ff"&gt;8&lt;/span&gt;);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="authentication--the-login-result"&gt;&lt;code&gt;Authentication&lt;/code&gt; — the login result&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;record&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;Authentication&lt;/span&gt;(&lt;span style="color:#66d9ef"&gt;string?&lt;/span&gt; Token, &lt;span style="color:#66d9ef"&gt;bool&lt;/span&gt; Valid, &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; CreatedAt, &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; Expiration);
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;The record your authentication route returns after checking &lt;code&gt;Credentials&lt;/code&gt;: &lt;code&gt;Token&lt;/code&gt; is the issued JWT (or
+&lt;code&gt;null&lt;/code&gt; on failure), &lt;code&gt;Valid&lt;/code&gt; indicates whether the attempt succeeded, and &lt;code&gt;CreatedAt&lt;/code&gt;/&lt;code&gt;Expiration&lt;/code&gt; describe
+the token&amp;rsquo;s lifetime — the values you&amp;rsquo;d typically use to size access-token lifetime and drive a refresh
+flow, especially under &lt;code&gt;ClaimsOnly&lt;/code&gt; mode where a short expiration is what keeps role changes and
+revocations bounded.&lt;/p&gt;
+&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/architecture"&gt;Architecture&lt;/a&gt;&lt;/strong&gt; — the full token → &lt;code&gt;JwtMiddleware&lt;/code&gt; → &lt;code&gt;Items[&amp;quot;User&amp;quot;]&lt;/code&gt; →
+authorization-filter flow, alongside the rest of the pipeline.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration"&gt;Configuration&lt;/a&gt;&lt;/strong&gt; — registering &lt;code&gt;JwtMiddleware&lt;/code&gt; via &lt;code&gt;AddMiddlewares&lt;/code&gt; and wiring up
+&lt;code&gt;ConfigureSecurity()&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — how &lt;code&gt;ExceptionMiddleware&lt;/code&gt; and
+&lt;code&gt;TraceActivityMiddleware&lt;/code&gt; relate to the rest of the pipeline &lt;code&gt;JwtMiddleware&lt;/code&gt; runs in.&lt;/li&gt;
+&lt;/ul&gt;</content></item></channel></rss>
