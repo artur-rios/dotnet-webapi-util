@@ -8,12 +8,15 @@ public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivity
 {
     private const string TraceParentHeader = "traceparent";
 
+    static TraceActivityMiddleware()
+    {
+        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+        Activity.ForceDefaultIdFormat = true;
+    }
+
     public async Task InvokeAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-
-        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
-        Activity.ForceDefaultIdFormat = true;
 
         var createdActivity = false;
         var activity = Activity.Current;
