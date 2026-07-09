@@ -61,7 +61,7 @@ flowchart TB
     Provider -.-> Cached["CachedAuthenticationProvider<br/><i>IMemoryCache, Ttl / CacheMisses</i>"]
     Cached -.-> Provider
 
-    Claims --> Items["HttpContext.Items[\"User\"]"]
+    Claims --> Items["HttpContext.Items[User]"]
     Provider --> Items
 
     Items --> Authorize["AuthorizeAttribute<br/><i>401 if no user</i>"]

@@ -4,10 +4,11 @@ title = 'Middleware & Diagnostics'
 
 # Middleware & Diagnostics
 
-`ArturRios.Util.WebApi` ships three cross-cutting pieces that sit in the request pipeline —
-`TraceActivityMiddleware`, `ExceptionMiddleware` — plus `TracePropagationHandler`, which carries the
-same trace id onto outgoing `HttpClient` calls. All three are the built-in middlewares referenced in
-[Architecture](/architecture/) and [Configuration](/configuration/).
+`ArturRios.Util.WebApi` ships two request-pipeline middlewares — `TraceActivityMiddleware` and
+`ExceptionMiddleware` — plus `TracePropagationHandler`, a `DelegatingHandler` that carries the same
+trace id onto outgoing `HttpClient` calls. (The third pipeline middleware, `JwtMiddleware`, is covered
+on the [Security](/security/) page.) The middlewares are registered through `AddMiddlewares`, as
+referenced in [Architecture](/architecture/) and [Configuration](/configuration/).
 
 ## `WebApiMiddleware` and registration order
 
@@ -77,8 +78,8 @@ For each request, `InvokeAsync`:
 flowchart LR
     Req["Incoming request"] --> Check{"Activity.Current?"}
     Check -- "exists" --> Reuse["Reuse it"]
-    Check -- "none" --> New["Start new \"ServerReceive\" activity"]
-    Reuse --> Set["context.TraceIdentifier / Items[\"TraceId\"]"]
+    Check -- "none" --> New["Start new ServerReceive activity"]
+    Reuse --> Set["context.TraceIdentifier / Items[TraceId]"]
     New --> Set
     Set --> Header["Response header: traceparent"]
     Header --> Next["Next middleware / endpoint"]

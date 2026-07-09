@@ -124,10 +124,15 @@ UseSwagger([EnvironmentType.Development, EnvironmentType.Staging]); // explicit 
 
 Because `GetSwaggerEnvironments()` always falls back to `[Development, Local]` rather than returning an
 empty list, in practice Swagger's on/off state is always decided by one of the first two rules — there
-is no separate `appsettings.json` toggle you need to flip. `AppSettingsKeys.SwaggerEnabled`
-(`"Swagger:Enabled"`) is an internal configuration key the framework sets for its own use once it
-determines the current environment is allowed; `JwtMiddleware` reads it to recognize `/swagger` routes
-and skip authentication on them. It is not a setting you configure to turn Swagger on or off.
+is no separate `appsettings.json` toggle you need to flip to turn Swagger on or off.
+
+`AppSettingsKeys.SwaggerEnabled` (`"Swagger:Enabled"`) is a separate internal marker, and it is set only
+when you pass an explicit `SwaggerEnvironments:[...]` argument that includes the current environment
+(the marker uses the raw argument, not the `[Development, Local]` fallback). `JwtMiddleware` reads this
+marker to recognize `/swagger` routes and skip authentication on them. This means Swagger can be *served*
+by default in `Development`/`Local` without the marker being set — in that case the `/swagger`
+authentication bypass is not active unless you also pass the matching `SwaggerEnvironments:[...]`
+argument.
 
 ## Logging
 
