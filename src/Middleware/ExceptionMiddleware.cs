@@ -6,8 +6,16 @@ using Newtonsoft.Json;
 
 namespace ArturRios.Util.WebApi.Middleware;
 
+/// <summary>
+/// Catches unhandled exceptions raised further down the pipeline and converts them into a JSON error response,
+/// logging the exception and quietly ignoring client-initiated request cancellations.
+/// </summary>
+/// <param name="next">The next middleware in the pipeline.</param>
+/// <param name="logger">Used to log unhandled exceptions and cancellations.</param>
 public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger) : WebApiMiddleware
 {
+    /// <summary>Invokes the next middleware, catching any unhandled exception and writing an error response instead of propagating it.</summary>
+    /// <param name="httpContext">The current HTTP context.</param>
     public async Task InvokeAsync(HttpContext httpContext)
     {
         try

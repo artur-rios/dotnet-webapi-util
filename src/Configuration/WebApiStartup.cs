@@ -19,6 +19,13 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace ArturRios.Util.WebApi.Configuration;
 
+/// <summary>
+/// Base class for bootstrapping an ASP.NET Core web API: builds the <see cref="WebApplicationBuilder"/> and
+/// <see cref="WebApplication"/>, wires up configuration, logging, middlewares and Swagger, and exposes hooks
+/// (<see cref="Build"/>, <see cref="ConfigureApp"/>, <see cref="AddDependencies"/>, etc.) for derived classes
+/// to customize the pipeline.
+/// </summary>
+/// <param name="args">The command-line arguments passed to the application entry point.</param>
 public abstract class WebApiStartup(string[] args)
 {
     private readonly Action<SwaggerGenOptions> _swaggerGenJwtAuthentication = setup =>
@@ -43,34 +50,56 @@ public abstract class WebApiStartup(string[] args)
         setup.AddSecurityRequirement(_ => jwtRequirement);
     };
 
+    /// <summary>The builder used to configure services before the application is built.</summary>
     protected readonly WebApplicationBuilder Builder = WebApplication.CreateBuilder(args);
+
+    /// <summary>The startup parameters parsed from the command-line arguments.</summary>
     protected readonly WebApiParameters Parameters = new(args);
 
     private SettingsProvider _settings = null!;
+
+    /// <summary>The built application. Populated by <see cref="BuildApp"/>.</summary>
     protected WebApplication App = null!;
 
+    /// <summary>Performs the full startup sequence (configuration, services, middlewares, etc.). Implemented by derived classes.</summary>
     public abstract void Build();
 
+    /// <summary>Runs the built application, blocking until it shuts down.</summary>
     public void Run() => App.Run();
 
+    /// <summary>Calls <see cref="Build"/> followed by <see cref="Run"/>.</summary>
     public void BuildAndRun()
     {
         Build();
         Run();
     }
 
+    /// <summary>Builds <see cref="App"/> from <see cref="Builder"/>.</summary>
     public void BuildApp() => App = Builder.Build();
 
+    /// <summary>Configures the built application's request pipeline. Implemented by derived classes.</summary>
     public abstract void ConfigureApp();
 
+    /// <summary>Registers application-specific dependencies. Override to add custom services.</summary>
     public virtual void AddDependencies() { }
+
+    /// <summary>Configures CORS policies. Override to enable and customize CORS.</summary>
     public virtual void ConfigureCors() { }
+
+    /// <summary>Configures authentication/authorization. Override to enable custom security.</summary>
     public virtual void ConfigureSecurity() { }
+
+    /// <summary>Configures web API-specific services (controllers, filters, etc.). Override to customize.</summary>
     public virtual void ConfigureWebApi() { }
+
+    /// <summary>Starts background or hosted services. Override to start custom services.</summary>
     public virtual void StartServices() { }
 
+    /// <summary>Adds the default ASP.NET Core logging services.</summary>
     public void AddLogging() => Builder.Services.AddLogging();
 
+    /// <summary>Replaces the default logging providers with the custom logger built from <paramref name="loggerConfigurations"/>.</summary>
+    /// <param name="loggerConfigurations">The logger configurations to apply.</param>
     public void AddCustomLogging(List<LoggerConfiguration> loggerConfigurations)
     {
         Builder.Services.AddScoped<IStateLogger>(_ => new StateLogger(loggerConfigurations));
@@ -83,6 +112,8 @@ public abstract class WebApiStartup(string[] args)
         });
     }
 
+    /// <summary>Loads application settings and/or the environment file according to <see cref="Parameters"/>,
+    /// and registers the resulting <see cref="SettingsProvider"/>/<see cref="EnvironmentProvider"/> as services.</summary>
     public void LoadConfiguration()
     {
         Builder.Services.AddSingleton(sp =>
@@ -113,6 +144,9 @@ public abstract class WebApiStartup(string[] args)
         }
     }
 
+    /// <summary>Registers each given middleware type on the application pipeline, skipping any type that does
+    /// not derive from <see cref="WebApiMiddleware"/>.</summary>
+    /// <param name="middlewares">The middleware types to register, in pipeline order.</param>
     public void AddMiddlewares(Type[] middlewares)
     {
         foreach (var middleware in middlewares)
@@ -124,6 +158,8 @@ public abstract class WebApiStartup(string[] args)
         }
     }
 
+    /// <summary>Replaces ASP.NET Core's default invalid-model-state response with a 400 result carrying a
+    /// <see cref="DataOutput{T}"/> whose errors list each invalid parameter and its message.</summary>
     public void AddCustomInvalidModelStateResponse() =>
         Builder.Services.Configure<ApiBehaviorOptions>(options =>
         {
@@ -141,6 +177,10 @@ public abstract class WebApiStartup(string[] args)
             };
         });
 
+    /// <summary>Enables the Swagger middleware (JSON endpoint and UI) when the current environment is allowed,
+    /// as determined by <paramref name="allowedEnvironments"/>, <see cref="WebApiParameters.GetSwaggerEnvironments"/>,
+    /// or <see cref="AppSettingsKeys.SwaggerEnabled"/>, in that order of precedence.</summary>
+    /// <param name="allowedEnvironments">Optional explicit list of environments in which Swagger should be served.</param>
     public void UseSwagger(EnvironmentType[]? allowedEnvironments = null)
     {
         bool useSwagger;
@@ -170,6 +210,11 @@ public abstract class WebApiStartup(string[] args)
         App.UseSwaggerUI();
     }
 
+    /// <summary>Registers the Swagger generator (<c>AddSwaggerGen</c>) when the current environment is allowed,
+    /// optionally applying custom <see cref="SwaggerGenOptions"/> and/or JWT bearer security definitions.</summary>
+    /// <param name="allowedEnvironments">Optional explicit list of environments in which Swagger docs should be generated.</param>
+    /// <param name="swaggerGenOptions">Optional callback to further configure <see cref="SwaggerGenOptions"/>.</param>
+    /// <param name="jwtAuthentication">Whether to add a JWT bearer security definition/requirement to the generated docs.</param>
     public void UseSwaggerGen(EnvironmentType[]? allowedEnvironments = null,
         Action<SwaggerGenOptions>? swaggerGenOptions = null, bool jwtAuthentication = false)
     {
