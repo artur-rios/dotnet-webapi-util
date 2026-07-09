@@ -8,7 +8,7 @@ namespace ArturRios.Util.WebApi.Middleware;
 
 public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger) : WebApiMiddleware
 {
-    public async Task Invoke(HttpContext httpContext)
+    public async Task InvokeAsync(HttpContext httpContext)
     {
         try
         {
@@ -45,18 +45,7 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
             messages = customException.Messages;
         }
 
-        logger.LogError("Exception: {ExceptionMessage}", exception.Message);
-        logger.LogError("Stack: {ExceptionStackTrace}", exception.StackTrace);
-
-        foreach (var message in messages)
-        {
-            logger.LogError("Message: {Message}", message);
-        }
-
-        if (exception.InnerException is not null)
-        {
-            logger.LogError("Inner exception on request: {InnerExceptionMessage}", exception.InnerException.Message);
-        }
+        logger.LogError(exception, "Unhandled exception while processing the request.");
 
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = HttpStatusCodes.InternalServerError;
