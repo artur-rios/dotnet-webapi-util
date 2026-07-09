@@ -94,7 +94,7 @@ public class JwtMiddlewareTests
             return Task.CompletedTask;
         }, JwtValidationMode.ClaimsOnly);
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
 
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
         Assert.Equal(42, user.Id);
@@ -110,7 +110,7 @@ public class JwtMiddlewareTests
         var (context, _) = BuildContext(token, provider);
         var middleware = CreateMiddleware(_ => Task.CompletedTask, JwtValidationMode.ClaimsOnly);
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
 
         Assert.Equal(0, provider.CallCount);
     }
@@ -127,7 +127,7 @@ public class JwtMiddlewareTests
             return Task.CompletedTask;
         }, JwtValidationMode.ClaimsOnly);
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Empty(log.ToString());
@@ -146,7 +146,7 @@ public class JwtMiddlewareTests
             return Task.CompletedTask;
         }, JwtValidationMode.Revalidate);
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
 
         Assert.Equal(1, provider.CallCount);
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
@@ -167,7 +167,7 @@ public class JwtMiddlewareTests
             return Task.CompletedTask;
         }, JwtValidationMode.Revalidate);
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Contains("User not found", await ReadBody(context));
@@ -203,7 +203,7 @@ public class JwtMiddlewareTests
         context.Response.Body = new MemoryStream();
         context.Request.Headers.Authorization = $"Bearer {token}";
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
 
         Assert.Equal("next", log.ToString());
         Assert.Equal(0, provider.CallCount);
@@ -220,7 +220,34 @@ public class JwtMiddlewareTests
             return Task.CompletedTask;
         }, JwtValidationMode.ClaimsOnly);
 
-        await middleware.Invoke(context);
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Empty(log.ToString());
+    }
+
+    [Fact]
+    public async Task AcceptsLowercaseBearerScheme()
+    {
+        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
+        var (context, log) = BuildContext(token, provider: null);
+        context.Request.Headers.Authorization = $"bearer {token}"; // lowercase scheme
+        var middleware = CreateMiddleware(_ => { log.Append("next"); return Task.CompletedTask; }, JwtValidationMode.ClaimsOnly);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+    }
+
+    [Fact]
+    public async Task RejectsNonBearerScheme()
+    {
+        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
+        var (context, log) = BuildContext(token: null, provider: null);
+        context.Request.Headers.Authorization = $"Basic {token}";
+        var middleware = CreateMiddleware(_ => { log.Append("next"); return Task.CompletedTask; }, JwtValidationMode.ClaimsOnly);
+
+        await middleware.InvokeAsync(context);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Empty(log.ToString());

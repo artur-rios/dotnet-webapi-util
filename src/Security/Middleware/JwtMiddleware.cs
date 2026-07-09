@@ -12,6 +12,7 @@ using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
+using System.Net.Http.Headers;
 
 namespace ArturRios.Util.WebApi.Security.Middleware;
 
@@ -43,7 +44,7 @@ public class JwtMiddleware(
     /// invoking the next middleware; otherwise writes a 401 response.
     /// </summary>
     /// <param name="context">The current HTTP context.</param>
-    public async Task Invoke(HttpContext context)
+    public async Task InvokeAsync(HttpContext context)
     {
         var endpoint = context.GetEndpoint();
 
@@ -58,7 +59,7 @@ public class JwtMiddleware(
             return;
         }
 
-        var token = context.Request.Headers.Authorization.FirstOrDefault()?.Split(' ').Last() ?? string.Empty;
+        var token = ExtractBearerToken(context);
 
         var isValid = await jwtHandler.IsTokenValidAsync(token, tokenConfig.Secret);
 
@@ -107,7 +108,7 @@ public class JwtMiddleware(
 
     private static async Task WriteUnauthorized(HttpContext context, string? authError)
     {
-        var output = ProcessOutput.New.WithError(authError);
+        var output = ProcessOutput.New.WithError(authError ?? "Unauthorized");
 
         if (context.Response.HasStarted)
         {
@@ -120,6 +121,24 @@ public class JwtMiddleware(
         var payload = JsonConvert.SerializeObject(output);
 
         await context.Response.WriteAsync(payload);
+    }
+
+    private static string ExtractBearerToken(HttpContext context)
+    {
+        var header = context.Request.Headers.Authorization.FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(header) || !AuthenticationHeaderValue.TryParse(header, out var parsed))
+        {
+            return string.Empty;
+        }
+
+        if (!string.Equals(parsed.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(parsed.Parameter))
+        {
+            return string.Empty;
+        }
+
+        return parsed.Parameter.Trim();
     }
 
     private bool IsSwaggerRoute(string path) =>
