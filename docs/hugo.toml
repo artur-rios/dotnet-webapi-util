@@ -3,6 +3,10 @@ locale = 'en-us'
 title = 'Dotnet WebApi Util'
 theme = 'hugo-theme-re-terminal'
 
+[[module.mounts]]
+source = 'coverage-report'
+target = 'static/coverage-report'
+
 [params]
 author_email = 'arturdev@duck.com'
 name = 'Artur Rios'
@@ -51,3 +55,8 @@ identifier = "github"
 name = "GitHub"
 url = "https://github.com/artur-rios/dotnet-webapi-util"
 weight = 80
+[[menu.main]]
+identifier = "test-coverage"
+name = "Test Coverage"
+url = "https://artur-rios.github.io/dotnet-webapi-util/coverage-report"
+weight = 90
