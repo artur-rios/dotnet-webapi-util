@@ -150,3 +150,5 @@ See [Responses](/responses/) for the full mapping reference.
   tracing.
 - **[HTTP Client](/dotnet-webapi-util/http-client)** — building typed clients on top of `BaseWebApiClient`.
 - **[Responses](/dotnet-webapi-util/responses)** — the full `ResponseResolver` mapping reference.
+- **[Endpoint Toggling](/dotnet-webapi-util/endpoint-toggle)** — enabling or disabling individual endpoints from code or
+  configuration.

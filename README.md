@@ -23,6 +23,7 @@ Requires **.NET 10**.
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/http-client/) |
 | Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/responses/) |
+| Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint toggling](https://artur-rios.github.io/dotnet-webapi-util/endpoint-toggle/) |
 
 See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/architecture/)** for how these pieces fit together.
 
@@ -200,6 +201,33 @@ public ActionResult<DataOutput<UserDto?>> GetById(int id)
 
 Overloads also accept `PaginatedOutput<T>` and `ProcessOutput`, and all of them take an optional
 explicit `statusCode` to override the default.
+
+### Endpoint toggling
+
+`[EndpointToggle]` turns a single endpoint on or off. The compile-time form fixes the state in code; the
+configuration form re-reads it on every request from `appsettings.json` and/or environment variables, so
+an endpoint can be disabled without a redeploy:
+
+```csharp
+public class ReportsController : ControllerBase
+{
+    // Off in code — always returns the disabled response.
+    [EndpointToggle(isEnabled: false)]
+    [HttpGet("legacy")]
+    public IActionResult Legacy() { /* ... */ }
+
+    // Read from configuration key "Endpoints:Reports:Export" on every request.
+    [EndpointToggle(ConfigurationSourceType.AppSettings)]
+    [HttpGet("export")]
+    public IActionResult Export() { /* ... */ }
+}
+```
+
+When the endpoint is disabled, `disabledOutputType` decides the shape of the response — an empty status
+code (`Void`), the action's default return value (`Default`), a `ProcessOutput` envelope carrying
+`disabledMessage` (`Object`, the default), or a thrown `EndpointDisabledException` (`Exception`) that the
+exception pipeline handles. The status code defaults to `404 Not Found` and can be overridden with
+`disabledStatusCode`.
 
 ## Documentation
 

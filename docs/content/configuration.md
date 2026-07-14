@@ -157,3 +157,5 @@ call.
 - **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — the built-in middlewares registered via
   `AddMiddlewares`.
 - **[Responses](/dotnet-webapi-util/responses)** — `ResponseResolver` and the invalid-model-state envelope shape.
+- **[Endpoint Toggling](/dotnet-webapi-util/endpoint-toggle)** — reading `appsettings.json`/environment values to enable or
+  disable individual endpoints.

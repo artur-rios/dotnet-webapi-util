@@ -34,6 +34,7 @@ flowchart LR
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & Diagnostics](/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP Client](/http-client/) |
 | Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](/responses/) |
+| Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint Toggling](/endpoint-toggle/) |
 
 ## Installation
 
@@ -60,6 +61,8 @@ exceptions.
   tracing.
 - **[HTTP Client](/dotnet-webapi-util/http-client)** — building typed clients on top of `BaseWebApiClient`.
 - **[Responses](/dotnet-webapi-util/responses)** — resolving `ArturRios.Output` envelopes into `ActionResult`s.
+- **[Endpoint Toggling](/dotnet-webapi-util/endpoint-toggle)** — enabling or disabling individual endpoints from code or
+  configuration.
 
 The source lives at [github.com/artur-rios/dotnet-webapi-util](https://github.com/artur-rios/dotnet-webapi-util),
 licensed under the MIT License.
