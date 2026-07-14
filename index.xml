@@ -121,6 +121,8 @@ freshness, &lt;code&gt;HttpContext.RequestServices&lt;/code&gt;) rather than pas
 tracing.&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/http-client"&gt;HTTP Client&lt;/a&gt;&lt;/strong&gt; — building typed clients on top of &lt;code&gt;BaseWebApiClient&lt;/code&gt;.&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — the full &lt;code&gt;ResponseResolver&lt;/code&gt; mapping reference.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/endpoint-toggle"&gt;Endpoint Toggling&lt;/a&gt;&lt;/strong&gt; — enabling or disabling individual endpoints from code or
+configuration.&lt;/li&gt;
 &lt;/ul&gt;</content></item><item><title>Configuration</title><link>https://artur-rios.github.io/dotnet-webapi-util/configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/configuration/</guid><description>&lt;h1 id="configuration"&gt;Configuration&lt;/h1&gt;
 &lt;p&gt;&lt;code&gt;WebApiStartup&lt;/code&gt; is the abstract base class you derive from to bootstrap an ASP.NET Core host:
 configuration loading, logging, Swagger, the middleware pipeline and the invalid-model-state response all
@@ -372,6 +374,186 @@ together.&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — the built-in middlewares registered via
 &lt;code&gt;AddMiddlewares&lt;/code&gt;.&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;ResponseResolver&lt;/code&gt; and the invalid-model-state envelope shape.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/endpoint-toggle"&gt;Endpoint Toggling&lt;/a&gt;&lt;/strong&gt; — reading &lt;code&gt;appsettings.json&lt;/code&gt;/environment values to enable or
+disable individual endpoints.&lt;/li&gt;
+&lt;/ul&gt;</content></item><item><title>Endpoint Toggling</title><link>https://artur-rios.github.io/dotnet-webapi-util/endpoint-toggle/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/endpoint-toggle/</guid><description>&lt;h1 id="endpoint-toggling"&gt;Endpoint Toggling&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;[EndpointToggle]&lt;/code&gt; is an action filter attribute that turns a single endpoint on or off. When the endpoint
+is disabled, the request is short-circuited &lt;strong&gt;before the action runs&lt;/strong&gt; and a response is returned in one of
+several shapes. The toggle can be fixed in code or resolved from configuration on every request, so an
+endpoint can be disabled without a redeploy.&lt;/p&gt;
+&lt;h2 id="the-two-forms"&gt;The two forms&lt;/h2&gt;
+&lt;p&gt;The attribute has two constructors — pick one per endpoint:&lt;/p&gt;</description><content>&lt;h1 id="endpoint-toggling"&gt;Endpoint Toggling&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;[EndpointToggle]&lt;/code&gt; is an action filter attribute that turns a single endpoint on or off. When the endpoint
+is disabled, the request is short-circuited &lt;strong&gt;before the action runs&lt;/strong&gt; and a response is returned in one of
+several shapes. The toggle can be fixed in code or resolved from configuration on every request, so an
+endpoint can be disabled without a redeploy.&lt;/p&gt;
+&lt;h2 id="the-two-forms"&gt;The two forms&lt;/h2&gt;
+&lt;p&gt;The attribute has two constructors — pick one per endpoint:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Form&lt;/th&gt;
+&lt;th&gt;Constructor&lt;/th&gt;
+&lt;th&gt;Toggle source&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;Compile-time&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;[EndpointToggle(bool isEnabled = true, ...)]&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;The &lt;code&gt;isEnabled&lt;/code&gt; flag, fixed at build time.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Configuration&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;[EndpointToggle(ConfigurationSourceType configurationSource, ...)]&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;A configuration value re-read on every request.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;ReportsController&lt;/span&gt; : ControllerBase
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#75715e"&gt;// Compile-time: always disabled until the code changes.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [EndpointToggle(isEnabled: false)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [HttpGet(&amp;#34;legacy&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; IActionResult Legacy() { &lt;span style="color:#75715e"&gt;/* ... */&lt;/span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#75715e"&gt;// Configuration: re-read from &amp;#34;Endpoints:Reports:Export&amp;#34; on every request.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [EndpointToggle(ConfigurationSourceType.AppSettings)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [HttpGet(&amp;#34;export&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; IActionResult Export() { &lt;span style="color:#75715e"&gt;/* ... */&lt;/span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="request-flow"&gt;Request flow&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;flowchart TB
+Request[&amp;#34;Request reaches action&amp;#34;] --&amp;gt; Source{&amp;#34;Configuration form?&amp;#34;}
+Source -- &amp;#34;no&amp;#34; --&amp;gt; Static[&amp;#34;Use isEnabled flag&amp;#34;]
+Source -- &amp;#34;yes&amp;#34; --&amp;gt; Config[&amp;#34;Read toggle from configuration&amp;#34;]
+Static --&amp;gt; Enabled{&amp;#34;Enabled?&amp;#34;}
+Config --&amp;gt; Enabled
+Enabled -- &amp;#34;yes&amp;#34; --&amp;gt; Action[&amp;#34;Action runs normally&amp;#34;]
+Enabled -- &amp;#34;no&amp;#34; --&amp;gt; Shape[&amp;#34;Shape disabled response by OutputType&amp;#34;]
+Shape --&amp;gt; Void[&amp;#34;Void → empty status code&amp;#34;]
+Shape --&amp;gt; Default[&amp;#34;Default → action&amp;#39;s default return value&amp;#34;]
+Shape --&amp;gt; Object[&amp;#34;Object → ProcessOutput envelope&amp;#34;]
+Shape --&amp;gt; Exception[&amp;#34;Exception → throw EndpointDisabledException&amp;#34;]
+&lt;/pre&gt;
+&lt;h2 id="resolving-the-toggle-from-configuration"&gt;Resolving the toggle from configuration&lt;/h2&gt;
+&lt;p&gt;The configuration form reads its value from the source given by &lt;code&gt;ConfigurationSourceType&lt;/code&gt;:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;&lt;code&gt;ConfigurationSourceType&lt;/code&gt;&lt;/th&gt;
+&lt;th&gt;Read from&lt;/th&gt;
+&lt;th&gt;Key separator&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AppSettings&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;IConfiguration&lt;/code&gt; (resolved from the request&amp;rsquo;s services)&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;:&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;EnvFile&lt;/code&gt; / &lt;code&gt;EnvironmentVariables&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Process environment variables (&lt;code&gt;Environment.GetEnvironmentVariable&lt;/code&gt;)&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;_&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3 id="the-key"&gt;The key&lt;/h3&gt;
+&lt;p&gt;Pass an explicit &lt;code&gt;key&lt;/code&gt; to read a specific configuration entry. When &lt;code&gt;key&lt;/code&gt; is empty, the key is &lt;strong&gt;derived&lt;/strong&gt;
+from the key prefix, the current controller name, the action name, and the optional suffix:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;&amp;lt;keyPrefix with [Controller] replaced&amp;gt;&amp;lt;sep&amp;gt;&amp;lt;ActionName&amp;gt;[&amp;lt;sep&amp;gt;&amp;lt;keySuffix&amp;gt;]
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;When &lt;code&gt;keyPrefix&lt;/code&gt; is empty, a default is used — &lt;code&gt;Endpoints:[Controller]&lt;/code&gt; for app settings, or
+&lt;code&gt;Endpoints_[Controller]&lt;/code&gt; for environment variables — with &lt;code&gt;[Controller]&lt;/code&gt; replaced by the current
+controller name. So &lt;code&gt;[EndpointToggle(ConfigurationSourceType.AppSettings)]&lt;/code&gt; on &lt;code&gt;Export&lt;/code&gt; in
+&lt;code&gt;ReportsController&lt;/code&gt; reads &lt;code&gt;Endpoints:Reports:Export&lt;/code&gt;, while the environment-variable form reads
+&lt;code&gt;Endpoints_Reports_Export&lt;/code&gt;.&lt;/p&gt;
+&lt;h3 id="missing-values-default-to-enabled"&gt;Missing values default to &lt;em&gt;enabled&lt;/em&gt;&lt;/h3&gt;
+&lt;p&gt;If the toggle can&amp;rsquo;t be resolved to an explicit boolean, the endpoint stays &lt;strong&gt;enabled&lt;/strong&gt;, so a misconfigured
+toggle never silently hides a working endpoint. Both sources behave the same way: only a value that parses
+as &lt;code&gt;false&lt;/code&gt; disables the endpoint; an absent, empty, or non-boolean value leaves it enabled.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Situation&lt;/th&gt;
+&lt;th&gt;Result&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;Key set to &lt;code&gt;true&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Enabled&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Key set to &lt;code&gt;false&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Disabled&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Key absent, empty, or non-boolean&lt;/td&gt;
+&lt;td&gt;Enabled (fallback)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;App-settings &lt;code&gt;IConfiguration&lt;/code&gt; not registered&lt;/td&gt;
+&lt;td&gt;Enabled (fallback)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="shaping-the-disabled-response"&gt;Shaping the disabled response&lt;/h2&gt;
+&lt;p&gt;When an endpoint is disabled, &lt;code&gt;disabledOutputType&lt;/code&gt; (an &lt;code&gt;OutputType&lt;/code&gt;) decides what the caller receives:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;&lt;code&gt;OutputType&lt;/code&gt;&lt;/th&gt;
+&lt;th&gt;Disabled response&lt;/th&gt;
+&lt;th&gt;Status code&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Void&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Empty result, no body.&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;disabledStatusCode&lt;/code&gt; (default &lt;code&gt;404&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Default&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;The action&amp;rsquo;s default return value — &lt;code&gt;default(T)&lt;/code&gt; for value types, &lt;code&gt;null&lt;/code&gt; for reference types, or an empty result for &lt;code&gt;void&lt;/code&gt;.&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;disabledStatusCode&lt;/code&gt; (default &lt;code&gt;404&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Object&lt;/code&gt; &lt;em&gt;(default)&lt;/em&gt;&lt;/td&gt;
+&lt;td&gt;A &lt;code&gt;ProcessOutput&lt;/code&gt; envelope carrying &lt;code&gt;disabledMessage&lt;/code&gt;.&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;disabledStatusCode&lt;/code&gt; (default &lt;code&gt;404&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;Exception&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Throws &lt;code&gt;EndpointDisabledException&lt;/code&gt;, handled by the exception pipeline (e.g. &lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/"&gt;&lt;code&gt;ExceptionMiddleware&lt;/code&gt;&lt;/a&gt;).&lt;/td&gt;
+&lt;td&gt;Decided by the exception handler&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;A few details worth knowing:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;disabledStatusCode&lt;/code&gt; defaults to &lt;code&gt;404 Not Found&lt;/code&gt; and is honored by the &lt;code&gt;Void&lt;/code&gt;, &lt;code&gt;Default&lt;/code&gt; and &lt;code&gt;Object&lt;/code&gt;
+shapes whenever the caller provides it.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;disabledMessage&lt;/code&gt; (default &lt;code&gt;&amp;quot;This endpoint is currently disabled&amp;quot;&lt;/code&gt;) is only included by the &lt;code&gt;Object&lt;/code&gt;
+shape. The &lt;code&gt;Exception&lt;/code&gt; shape always carries the default message.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;EndpointToggleAttribute.DefaultDisabledStatusCode&lt;/code&gt; and &lt;code&gt;DefaultDisabledMessage&lt;/code&gt; expose those defaults.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;// Disabled requests get a 503 with a ProcessOutput explaining why.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[EndpointToggle(
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; ConfigurationSourceType.AppSettings,
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; disabledStatusCode: HttpStatusCode.ServiceUnavailable,
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; disabledOutputType: OutputType.Object,
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; disabledMessage: &amp;#34;Reporting is paused for maintenance&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[HttpGet(&amp;#34;export&amp;#34;)]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; IActionResult Export() { &lt;span style="color:#75715e"&gt;/* ... */&lt;/span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="where-to-next"&gt;Where to next&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/configuration"&gt;Configuration&lt;/a&gt;&lt;/strong&gt; — how &lt;code&gt;appsettings.json&lt;/code&gt; and environment values are loaded into
+the host that &lt;code&gt;[EndpointToggle]&lt;/code&gt; reads from.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — &lt;code&gt;ExceptionMiddleware&lt;/code&gt;, which handles the
+&lt;code&gt;EndpointDisabledException&lt;/code&gt; thrown by the &lt;code&gt;Exception&lt;/code&gt; output type.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/responses"&gt;Responses&lt;/a&gt;&lt;/strong&gt; — the &lt;code&gt;ProcessOutput&lt;/code&gt; envelope used by the &lt;code&gt;Object&lt;/code&gt; output type.&lt;/li&gt;
 &lt;/ul&gt;</content></item><item><title>HTTP Client</title><link>https://artur-rios.github.io/dotnet-webapi-util/http-client/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/http-client/</guid><description>&lt;h1 id="http-client"&gt;HTTP Client&lt;/h1&gt;
 &lt;p&gt;&lt;code&gt;ArturRios.Util.WebApi&lt;/code&gt; gives you a thin base for typed clients that call another web API:
 &lt;code&gt;BaseWebApiClient&lt;/code&gt; owns a shared &lt;code&gt;HttpGateway&lt;/code&gt;, and &lt;code&gt;BaseWebApiClientRoute&lt;/code&gt; groups related endpoints
