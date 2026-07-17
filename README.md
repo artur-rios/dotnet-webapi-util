@@ -1,5 +1,9 @@
 # ArturRios.Util.WebApi
 
+[![Docs](https://img.shields.io/badge/docs-website-blue)](https://artur-rios.github.io/dotnet-webapi-util)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![NuGet](https://img.shields.io/nuget/v/ArturRios.Util.WebApi.svg)](https://www.nuget.org/packages/ArturRios.Util.WebApi)
+
 Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
 (configuration, logging, Swagger, middleware pipeline), stateless-or-revalidating JWT authentication with
 role-based authorization, cross-cutting middleware for exceptions and distributed tracing, a thin
@@ -231,7 +235,7 @@ exception pipeline handles. The status code defaults to `404 Not Found` and can 
 
 ## Documentation
 
-Full documentation, including architecture diagrams: **https://artur-rios.github.io/dotnet-webapi-util**
+Full documentation, including architecture diagrams: **<https://artur-rios.github.io/dotnet-webapi-util>**
 
 ## Versioning
 
