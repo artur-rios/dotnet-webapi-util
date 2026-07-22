@@ -43,7 +43,6 @@ public class Startup(string[] args) : WebApiStartup(args)
     public override void Build()
     {
         LoadConfiguration();
-        AddLogging();
         AddCustomInvalidModelStateResponse();
         UseSwaggerGen(jwtAuthentication: true);
         Builder.Services.AddControllers();

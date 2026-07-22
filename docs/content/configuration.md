@@ -15,7 +15,6 @@ hooks.
 flowchart TB
     New["new Startup(args)<br/><i>builds WebApplicationBuilder + WebApiParameters</i>"] --> Build["Build() — abstract, you implement it"]
     Build --> LoadConfig["LoadConfiguration()"]
-    Build --> Logging["AddLogging() / AddCustomLogging(...)"]
     Build --> InvalidModel["AddCustomInvalidModelStateResponse()"]
     Build --> SwaggerGen["UseSwaggerGen(...)"]
     Build --> Deps["AddDependencies() — virtual hook"]
@@ -41,8 +40,6 @@ you can override:
 | `ConfigureWebApi()` | virtual hook | Override to configure web-API-specific services (controllers, filters, etc). No-op by default. |
 | `StartServices()` | virtual hook | Override to start background/hosted services. No-op by default. |
 | `LoadConfiguration()` | helper | Loads `appsettings`/env file per `WebApiParameters` and registers `SettingsProvider`/`EnvironmentProvider`. |
-| `AddLogging()` | helper | Adds the default ASP.NET Core logging services. |
-| `AddCustomLogging(loggerConfigurations)` | helper | Replaces the default logging providers with a custom logger built from the given configurations. |
 | `AddMiddlewares(Type[])` | helper | Registers each given middleware type on `App`, in order, skipping any type that isn't a `WebApiMiddleware`. |
 | `AddCustomInvalidModelStateResponse()` | helper | Replaces ASP.NET Core's default invalid-model-state response with a `DataOutput<string>`-shaped 400. |
 | `UseSwaggerGen(...)` | helper | Registers the Swagger generator, conditionally on the current environment. |
@@ -58,7 +55,6 @@ public class Startup(string[] args) : WebApiStartup(args)
     public override void Build()
     {
         LoadConfiguration();
-        AddLogging();
         AddCustomInvalidModelStateResponse();
         UseSwaggerGen(jwtAuthentication: true);
         Builder.Services.AddControllers();
@@ -136,10 +132,11 @@ argument.
 
 ## Logging
 
-`AddLogging()` wires up the default ASP.NET Core logging providers. `AddCustomLogging(loggerConfigurations)`
-instead clears the default providers and registers a custom logger (backed by `IStateLogger`) built from
-the given `LoggerConfiguration` list, with the minimum level set to `Trace`. Use one or the other, not
-both.
+`WebApiStartup` no longer configures logging — that is the derived class's responsibility. Because the
+library's logging types depend only on `Microsoft.Extensions.Logging.ILogger<T>`, any backend works:
+the default ASP.NET Core providers (already registered by `WebApplication.CreateBuilder`), Serilog
+(`Builder.Host.UseSerilog(...)`), or a custom `ILogger`. Configure whichever you prefer inside your
+`Build()` override before calling `BuildApp()`.
 
 ## Invalid model state
 
