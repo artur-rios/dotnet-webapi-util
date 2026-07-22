@@ -5,10 +5,11 @@
 [![NuGet](https://img.shields.io/nuget/v/ArturRios.Util.WebApi.svg)](https://www.nuget.org/packages/ArturRios.Util.WebApi)
 
 Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
-(configuration, Swagger, middleware pipeline), stateless-or-revalidating JWT authentication with
-role-based authorization, cross-cutting middleware for exceptions and distributed tracing, a thin
-typed-`HttpClient` base for calling other services, and a resolver that turns `ArturRios.Output` envelopes
-into `ActionResult`s.
+(configuration, Swagger, middleware pipeline), token authentication (app JWT and/or Google ID tokens, read
+from the header, a cookie, or either) with stateless-or-revalidating user resolution and role-based
+authorization, cross-cutting middleware for exceptions and distributed tracing, a thin typed-`HttpClient`
+base for calling other services, and a resolver that turns `ArturRios.Output` envelopes into
+`ActionResult`s.
 
 ## Install
 
@@ -23,7 +24,7 @@ Requires **.NET 10**.
 | Area | What it does | Docs |
 |---|---|---|
 | Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/configuration/) |
-| Security (JWT + roles) | `JwtMiddleware` validates the bearer token and attaches an `AuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
+| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `AuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/http-client/) |
 | Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/responses/) |
@@ -58,7 +59,7 @@ public class Startup(string[] args) : WebApiStartup(args)
         AddMiddlewares([
             typeof(TraceActivityMiddleware),
             typeof(ExceptionMiddleware),
-            typeof(JwtMiddleware)
+            typeof(AuthenticationMiddleware)
         ]);
 
         UseSwagger();
@@ -77,11 +78,32 @@ Startup behavior can be tweaked without code changes via command-line args parse
 
 ### Security
 
-`JwtMiddleware` validates the bearer JSON Web Token on each request, then attaches an
-`AuthenticatedUser` to `HttpContext.Items["User"]`. Swagger routes and endpoints marked with
-`[AllowAnonymous]` are skipped.
+`AuthenticationMiddleware` extracts a token from the request — the `Authorization: Bearer` header, a
+cookie, or either, per `AuthenticationOptions.Source` — and runs it through the enabled validators
+(the app's own JWT and/or a Google ID token) until one resolves an `AuthenticatedUser`, which is then
+attached to `HttpContext.Items["User"]`. Swagger routes and endpoints marked with `[AllowAnonymous]` are
+skipped.
 
-How the user is resolved is controlled by `JwtAuthenticationOptions.ValidationMode`:
+Register it with `AddTokenAuthentication`:
+
+```csharp
+builder.Services.AddTokenAuthentication(options =>
+{
+    options.Source = TokenSource.Either;  // Header | Cookie | Either (default: Header)
+    options.CookieName = "access_token";  // default
+    options.EnableJwt = true;             // default
+    options.EnableGoogle = true;          // default: false
+    options.GoogleClientIds = ["your-google-oauth-client-id"];
+    options.JwtMode = JwtValidationMode.ClaimsOnly; // or Revalidate
+});
+```
+
+At least one of `EnableJwt`/`EnableGoogle` must be enabled, and `EnableGoogle` requires at least one
+entry in `GoogleClientIds` — `AddTokenAuthentication` throws otherwise. A request may carry either kind of
+token: validators run in registration order (app JWT first, then Google), and the first one that resolves
+a user wins.
+
+For the app JWT, how the user is resolved is controlled by `AuthenticationOptions.JwtMode`:
 
 - **`ClaimsOnly` (default)** — the user is rebuilt from the token's `id` and `role` claims. No data
   store is queried, so authentication costs nothing beyond the signature check. Because nothing is
@@ -91,13 +113,15 @@ How the user is resolved is controlled by `JwtAuthenticationOptions.ValidationMo
   (resolved per-request from the request scope). Guarantees freshness and lets deleted users be
   rejected immediately, at the cost of one lookup per request.
 
-```csharp
-// Opt into per-request revalidation
-builder.Services.AddSingleton(new JwtAuthenticationOptions
-{
-    ValidationMode = JwtValidationMode.Revalidate
-});
-```
+A Google ID token is always resolved by looking up the token's verified email through
+`IAuthenticationProvider.GetAuthenticatedUserByEmail`, so an `IAuthenticationProvider` is **required**
+whenever `EnableGoogle` is `true`, as it is for JWT `Revalidate` mode. To accept Google sign-in:
+
+1. Add the `Google.Apis.Auth` package (already a dependency of this library, so it resolves
+   transitively — add it explicitly only if you call its APIs directly).
+2. Set `EnableGoogle = true` and `GoogleClientIds` to your app's OAuth client ID(s) on the web api options.
+3. Implement `IAuthenticationProvider.GetAuthenticatedUserByEmail(string)` (and register the provider,
+   optionally via `AddCachedAuthenticationProvider<T>`, below).
 
 #### Caching provider lookups
 
@@ -144,7 +168,7 @@ Register the built-in middlewares (each derives from `WebApiMiddleware`) in pipe
 AddMiddlewares([
     typeof(TraceActivityMiddleware), // assigns/propagates a W3C trace id
     typeof(ExceptionMiddleware),     // turns unhandled exceptions into a JSON error envelope
-    typeof(JwtMiddleware)
+    typeof(AuthenticationMiddleware)
 ]);
 ```
 

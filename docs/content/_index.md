@@ -19,8 +19,8 @@ authentication before it reaches your endpoint:
 flowchart LR
     Client["Client request"] --> Trace["TraceActivityMiddleware<br/><i>assigns/propagates W3C traceparent</i>"]
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
-    Exception --> Jwt["JwtMiddleware<br/><i>validates bearer token, attaches AuthenticatedUser</i>"]
-    Jwt --> Endpoint["Controller / endpoint"]
+    Exception --> Auth["AuthenticationMiddleware<br/><i>validates the request token, attaches AuthenticatedUser</i>"]
+    Auth --> Endpoint["Controller / endpoint"]
     Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
 ```
@@ -29,8 +29,8 @@ flowchart LR
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, logging, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](/configuration/) |
-| Security (JWT + roles) | `JwtMiddleware` validates the bearer token and attaches an `AuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](/security/) |
+| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](/configuration/) |
+| Security (JWT, Google + roles) | `AuthenticationMiddleware` reads the token from the header, a cookie, or either, and validates it as an app HMAC JWT or a Google ID token (either accepted per request), attaching an `AuthenticatedUser`; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](/security/) |
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & Diagnostics](/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP Client](/http-client/) |
 | Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](/responses/) |
