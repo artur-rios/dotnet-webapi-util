@@ -27,6 +27,8 @@ public class JwtMiddlewareTests
 
             return user;
         }
+
+        public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
     }
 
     private static SettingsProvider EmptySettings() =>

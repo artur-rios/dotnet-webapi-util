@@ -11,6 +11,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     private sealed class FakeAuthenticationProvider : IAuthenticationProvider
     {
         public AuthenticatedUser? GetAuthenticatedUserById(int id) => new(id, 1);
+        public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
     }
 
     [Fact]

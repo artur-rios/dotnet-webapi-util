@@ -35,4 +35,24 @@ public class CachedAuthenticationProvider(
 
         return user;
     }
+
+    /// <inheritdoc />
+    public AuthenticatedUser? GetAuthenticatedUserByEmail(string email)
+    {
+        var key = $"{_options.EmailCacheKeyPrefix}{email}";
+
+        if (cache.TryGetValue(key, out AuthenticatedUser? cachedUser))
+        {
+            return cachedUser;
+        }
+
+        var user = inner.GetAuthenticatedUserByEmail(email);
+
+        if (user is not null || _options.CacheMisses)
+        {
+            cache.Set(key, user, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = _options.Ttl });
+        }
+
+        return user;
+    }
 }
