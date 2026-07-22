@@ -5,10 +5,11 @@ title = 'Dotnet WebApi Util'
 # Documentation
 
 **`ArturRios.Util.WebApi`** is a set of building blocks for ASP.NET Core web APIs in .NET. It bundles a
-base class for bootstrapping the host (configuration, logging, Swagger, middleware pipeline),
-stateless-or-revalidating JWT authentication with role-based authorization, cross-cutting middleware for
-exceptions and distributed tracing, a thin typed-`HttpClient` base for calling other services, and a
-resolver that turns `ArturRios.Output` envelopes into `ActionResult`s.
+base class for bootstrapping the host (configuration, Swagger, middleware pipeline), token authentication
+that reads the token from the header, a cookie, or either and validates it as the app's own JWT and/or a
+Google ID token (with role-based authorization), cross-cutting middleware for exceptions and distributed
+tracing, a thin typed-`HttpClient` base for calling other services, and a resolver that turns
+`ArturRios.Output` envelopes into `ActionResult`s.
 
 ## Request pipeline
 
