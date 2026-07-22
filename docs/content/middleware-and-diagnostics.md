@@ -6,8 +6,8 @@ title = 'Middleware & Diagnostics'
 
 `ArturRios.Util.WebApi` ships two request-pipeline middlewares — `TraceActivityMiddleware` and
 `ExceptionMiddleware` — plus `TracePropagationHandler`, a `DelegatingHandler` that carries the same
-trace id onto outgoing `HttpClient` calls. (The third pipeline middleware, `JwtMiddleware`, is covered
-on the [Security](/security/) page.) The middlewares are registered through `AddMiddlewares`, as
+trace id onto outgoing `HttpClient` calls. (The third pipeline middleware, `AuthenticationMiddleware`, is
+covered on the [Security](/security/) page.) The middlewares are registered through `AddMiddlewares`, as
 referenced in [Architecture](/architecture/) and [Configuration](/configuration/).
 
 ## `WebApiMiddleware` and registration order
@@ -21,13 +21,13 @@ skipped. Registration happens **in the order given**:
 AddMiddlewares([
     typeof(TraceActivityMiddleware), // assigns/propagates a W3C trace id
     typeof(ExceptionMiddleware),     // turns unhandled exceptions into a JSON error envelope
-    typeof(JwtMiddleware)
+    typeof(AuthenticationMiddleware)
 ]);
 ```
 
 `TraceActivityMiddleware` runs first so the trace id is available to everything downstream, including
 exception logging; `ExceptionMiddleware` runs next so it can catch exceptions thrown by authentication or
-the endpoint itself; `JwtMiddleware` (see [Security](/security/)) runs last of the three.
+the endpoint itself; `AuthenticationMiddleware` (see [Security](/security/)) runs last of the three.
 
 ## `ExceptionMiddleware`
 
@@ -105,7 +105,7 @@ See [HTTP Client](/http-client/) for how `BaseWebApiClient` fits into that regis
 
 ## Where to next
 
-- **[Architecture](/dotnet-webapi-util/architecture)** — how these middlewares sit relative to `JwtMiddleware` and
+- **[Architecture](/dotnet-webapi-util/architecture)** — how these middlewares sit relative to `AuthenticationMiddleware` and
   `ResponseResolver` in the full pipeline.
 - **[Configuration](/dotnet-webapi-util/configuration)** — registering middlewares via `AddMiddlewares` as part of
   `WebApiStartup`.

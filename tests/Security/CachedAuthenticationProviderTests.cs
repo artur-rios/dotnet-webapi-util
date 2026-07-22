@@ -7,6 +7,24 @@ namespace ArturRios.Util.WebApi.Tests.Security;
 
 public class CachedAuthenticationProviderTests
 {
+    private sealed class CountingProvider(AuthenticatedUser? byId = null, AuthenticatedUser? byEmail = null) : IAuthenticationProvider
+    {
+        public int IdCallCount { get; private set; }
+        public int EmailCallCount { get; private set; }
+
+        public AuthenticatedUser? GetAuthenticatedUserById(int id)
+        {
+            IdCallCount++;
+            return byId;
+        }
+
+        public AuthenticatedUser? GetAuthenticatedUserByEmail(string email)
+        {
+            EmailCallCount++;
+            return byEmail;
+        }
+    }
+
     private sealed class CountingAuthenticationProvider(Func<int, AuthenticatedUser?> resolve) : IAuthenticationProvider
     {
         public int CallCount { get; private set; }
@@ -17,6 +35,8 @@ public class CachedAuthenticationProviderTests
 
             return resolve(id);
         }
+
+        public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
     }
 
     private static MemoryCache NewCache() => new(new MemoryCacheOptions());
@@ -71,5 +91,47 @@ public class CachedAuthenticationProviderTests
         provider.GetAuthenticatedUserById(42);
 
         Assert.Equal(1, inner.CallCount);
+    }
+
+    [Fact]
+    public void GetAuthenticatedUserByEmail_CachesPositiveResult()
+    {
+        var inner = new CountingProvider(byEmail: new AuthenticatedUser(5, 1));
+        var cache = NewCache();
+        var provider = new CachedAuthenticationProvider(inner, cache);
+
+        var first = provider.GetAuthenticatedUserByEmail("a@b.com");
+        var second = provider.GetAuthenticatedUserByEmail("a@b.com");
+
+        Assert.Equal(5, first!.Id);
+        Assert.Equal(5, second!.Id);
+        Assert.Equal(1, inner.EmailCallCount);
+    }
+
+    [Fact]
+    public void GetAuthenticatedUserByEmail_CachesMiss_WhenEnabled()
+    {
+        var inner = new CountingProvider(byEmail: null);
+        var cache = NewCache();
+        var provider = new CachedAuthenticationProvider(inner, cache, new CachedAuthenticationProviderOptions { CacheMisses = true });
+
+        provider.GetAuthenticatedUserByEmail("missing@b.com");
+        provider.GetAuthenticatedUserByEmail("missing@b.com");
+
+        Assert.Equal(1, inner.EmailCallCount);
+    }
+
+    [Fact]
+    public void EmailAndIdCaches_AreIndependent()
+    {
+        var inner = new CountingProvider(byId: new AuthenticatedUser(9, 1), byEmail: new AuthenticatedUser(5, 1));
+        var cache = NewCache();
+        var provider = new CachedAuthenticationProvider(inner, cache);
+
+        provider.GetAuthenticatedUserById(9);
+        provider.GetAuthenticatedUserByEmail("a@b.com");
+
+        Assert.Equal(1, inner.IdCallCount);
+        Assert.Equal(1, inner.EmailCallCount);
     }
 }

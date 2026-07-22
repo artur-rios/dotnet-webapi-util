@@ -18,8 +18,8 @@ A typical setup registers the three built-in middlewares in this order:
 flowchart LR
     Client["Client request"] --> Trace["TraceActivityMiddleware<br/><i>assigns/propagates W3C traceparent</i>"]
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
-    Exception --> Jwt["JwtMiddleware<br/><i>validates bearer token, attaches AuthenticatedUser</i>"]
-    Jwt --> Endpoint["Controller / endpoint"]
+    Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches AuthenticatedUser</i>"]
+    Auth --> Endpoint["Controller / endpoint"]
     Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
 ```
@@ -31,14 +31,14 @@ flowchart LR
 AddMiddlewares([
     typeof(TraceActivityMiddleware),
     typeof(ExceptionMiddleware),
-    typeof(JwtMiddleware)
+    typeof(AuthenticationMiddleware)
 ]);
 ```
 
 Because registration order is registration order, `TraceActivityMiddleware` runs first so the trace id
 is available to everything downstream (including exception logging), `ExceptionMiddleware` runs next so
-it can catch exceptions thrown by authentication or the endpoint itself, and `JwtMiddleware` runs last of
-the three so only requests that pass tracing/exception setup pay for token validation.
+it can catch exceptions thrown by authentication or the endpoint itself, and `AuthenticationMiddleware`
+runs last of the three so only requests that pass tracing/exception setup pay for token validation.
 
 See [Middleware & Diagnostics](/middleware-and-diagnostics/) for what `TraceActivityMiddleware` and
 `ExceptionMiddleware` do in detail, and [Configuration](/configuration/) for the full `WebApiStartup`
@@ -46,39 +46,53 @@ lifecycle.
 
 ## Security model
 
-`JwtMiddleware` validates the bearer token on every request that isn't a Swagger route or an
-`[AllowAnonymous]` endpoint. What happens next depends on `JwtAuthenticationOptions.ValidationMode`:
+`AuthenticationMiddleware` extracts a token (from the header, a cookie, or either, per
+`AuthenticationOptions.Source`) and validates it on every request that isn't a Swagger route or an
+`[AllowAnonymous]` endpoint. Which token schemes are tried, and how, depends on `AuthenticationOptions`
+(registered via `AddTokenAuthentication`):
 
 ```mermaid
 flowchart TB
-    Token["Bearer token"] --> Verify{"Signature valid?"}
-    Verify -- "no" --> R401["401 Unauthorized"]
-    Verify -- "yes" --> Mode{"ValidationMode"}
-
+    Token["Extracted token"] --> Jwt{"EnableJwt?"}
+    Jwt -- "yes" --> JwtValid{"Signature valid?"}
+    JwtValid -- "no" --> Google
+    JwtValid -- "yes" --> Mode{"JwtMode"}
     Mode -- "ClaimsOnly (default)" --> Claims["AuthenticatedUserFactory.FromToken<br/><i>id + role claims, no lookup</i>"]
-    Mode -- "Revalidate" --> Provider["IAuthenticationProvider.GetAuthenticatedUserById<br/><i>resolved per-request from RequestServices</i>"]
+    Mode -- "Revalidate" --> ProviderId["IAuthenticationProvider.GetAuthenticatedUserById<br/><i>resolved per-request from RequestServices</i>"]
 
-    Provider -.-> Cached["CachedAuthenticationProvider<br/><i>IMemoryCache, Ttl / CacheMisses</i>"]
-    Cached -.-> Provider
+    Jwt -- "no" --> Google{"EnableGoogle?"}
+    Google -- "yes" --> GoogleValid{"Google ID token valid?"}
+    GoogleValid -- "yes" --> ProviderEmail["IAuthenticationProvider.GetAuthenticatedUserByEmail"]
+    GoogleValid -- "no" --> R401["401 Unauthorized"]
+    Google -- "no" --> R401
+
+    ProviderId -.-> Cached["CachedAuthenticationProvider<br/><i>IMemoryCache, Ttl / CacheMisses</i>"]
+    ProviderEmail -.-> Cached
+    Cached -.-> ProviderId
+    Cached -.-> ProviderEmail
 
     Claims --> Items["HttpContext.Items[User]"]
-    Provider --> Items
+    ProviderId --> Items
+    ProviderEmail --> Items
 
     Items --> Authorize["AuthorizeAttribute<br/><i>401 if no user</i>"]
     Authorize --> RoleReq["RoleRequirementFilter<br/><i>403 if role not authorized</i>"]
     RoleReq --> Endpoint["Controller action"]
 ```
 
-`ClaimsOnly` (the default) never touches a data store — the user is rebuilt straight from the token's
-`id` and `role` claims, so authentication costs nothing beyond the signature check. `Revalidate` instead
-resolves `IAuthenticationProvider` from the current request's `HttpContext.RequestServices` and calls
-`GetAuthenticatedUserById` on every request, trading a lookup for freshness. `CachedAuthenticationProvider`
-sits transparently in front of any `IAuthenticationProvider` (registered via
-`AddCachedAuthenticationProvider<T>`) to absorb repeated lookups of the same user within a short TTL,
-without either mode needing to know it's there.
+For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the user is rebuilt
+straight from the token's `id` and `role` claims, so authentication costs nothing beyond the signature
+check. `Revalidate` instead resolves `IAuthenticationProvider` from the current request's
+`HttpContext.RequestServices` and calls `GetAuthenticatedUserById` on every request, trading a lookup for
+freshness. The Google scheme always resolves the user via `IAuthenticationProvider.GetAuthenticatedUserByEmail`
+after verifying the token, so an `IAuthenticationProvider` is required whenever Google authentication is
+enabled, just as it is for JWT `Revalidate`. `CachedAuthenticationProvider` sits transparently in front of
+any `IAuthenticationProvider` (registered via `AddCachedAuthenticationProvider<T>`) to absorb repeated
+lookups of the same user within a short TTL, without any mode needing to know it's there.
 
 `AuthorizeAttribute` and `RoleRequirementFilter` both read the same `HttpContext.Items["User"]` slot that
-`JwtMiddleware` populates, and both honor `[AllowAnonymous]` by short-circuiting before checking it.
+`AuthenticationMiddleware` populates, and both honor `[AllowAnonymous]` by short-circuiting before checking
+it.
 
 See [Security](/security/) for the full authentication and authorization reference.
 
@@ -133,14 +147,14 @@ See [Responses](/responses/) for the full mapping reference.
   because most requests don't need a fresh database read on every call; `Revalidate` (optionally cached)
   is there for the cases where staleness — instead of an expired token — is the risk you can't accept.
 - **Small, focused middlewares.** Each of `TraceActivityMiddleware`, `ExceptionMiddleware` and
-  `JwtMiddleware` does exactly one thing and derives from the `WebApiMiddleware` marker so it can be
-  composed via `AddMiddlewares` in whatever order a given host needs.
+  `AuthenticationMiddleware` does exactly one thing and derives from the `WebApiMiddleware` marker so it
+  can be composed via `AddMiddlewares` in whatever order a given host needs.
 - **Consistent `InvokeAsync`.** Every middleware follows the standard ASP.NET Core convention — a
   constructor capturing `RequestDelegate next` plus other dependencies, and a single `InvokeAsync(HttpContext)`
   method — so custom middlewares slot into `AddMiddlewares` the same way the built-in ones do.
-- **DI-first.** Dependencies such as `IAuthenticationProvider`, `JwtAuthenticationOptions` and
-  `SettingsProvider` are resolved through the container (constructor injection or, for per-request
-  freshness, `HttpContext.RequestServices`) rather than passed around manually.
+- **DI-first.** Dependencies such as `IAuthenticationProvider`, `AuthenticationOptions`, the
+  `ITokenValidator`s and `SettingsProvider` are resolved through the container (constructor injection or,
+  for per-request freshness, `HttpContext.RequestServices`) rather than passed around manually.
 
 ## Where to next
 

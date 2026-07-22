@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 namespace ArturRios.Util.WebApi.Security.Attributes;
 
 /// <summary>Rejects requests with a 401 response unless an <see cref="AuthenticatedUser"/> was attached to the
-/// context (typically by <see cref="Security.Middleware.JwtMiddleware"/>), unless the action is marked with <see cref="AllowAnonymousAttribute"/>.</summary>
+/// context (typically by <see cref="Security.Middleware.AuthenticationMiddleware"/>), unless the action is marked with <see cref="AllowAnonymousAttribute"/>.</summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class AuthorizeAttribute : Attribute, IAuthorizationFilter
 {

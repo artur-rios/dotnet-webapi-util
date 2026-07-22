@@ -1,7 +1,7 @@
 namespace ArturRios.Util.WebApi.Security.Enums;
 
 /// <summary>
-/// Controls how <c>JwtMiddleware</c> resolves the authenticated user for a validated token.
+/// Controls how <c>JwtTokenValidator</c> resolves the authenticated user for a validated app JWT.
 /// </summary>
 public enum JwtValidationMode
 {

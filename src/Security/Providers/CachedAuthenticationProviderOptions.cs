@@ -21,4 +21,7 @@ public class CachedAuthenticationProviderOptions
     /// The prefix used to build the cache key for each user id. Defaults to <c>auth:user:</c>.
     /// </summary>
     public string CacheKeyPrefix { get; set; } = "auth:user:";
+
+    /// <summary>The prefix used to build the cache key for each user email. Defaults to <c>auth:email:</c>.</summary>
+    public string EmailCacheKeyPrefix { get; set; } = "auth:email:";
 }

@@ -4,33 +4,68 @@ title = 'Security'
 
 # Security
 
-`ArturRios.Util.WebApi` ships JWT authentication and role-based authorization as a small, composable set
-of pieces: `JwtMiddleware` validates the token and attaches the user, a pair of attributes/filters declare
-access rules, and `Credentials`/`Authentication` give you the record types for a login flow.
+`ArturRios.Util.WebApi` ships token authentication and role-based authorization as a small, composable
+set of pieces: `AuthenticationMiddleware` extracts and validates the token and attaches the user, a pair
+of attributes/filters declare access rules, and `Credentials`/`Authentication` give you the record types
+for a login flow.
 
-## `JwtMiddleware`
+Two token schemes are supported side by side — the app's own HMAC JWT and Google ID tokens — and either
+can be accepted on a given request. Which scheme(s) are enabled, where the token is read from, and how the
+user is resolved are all controlled by one `AuthenticationOptions` instance, registered via
+`AddTokenAuthentication`.
 
-`JwtMiddleware` runs once per request (see [Architecture](/architecture/) for where it sits in the
-pipeline). For each request it:
-
-1. Skips validation entirely for Swagger routes and for endpoints marked `[AllowAnonymous]`.
-2. Extracts the bearer token from the `Authorization` header. The scheme **must** be `Bearer`
-   (case-insensitive) with a non-empty parameter — any other or malformed scheme is treated as no token.
-3. Validates the token's signature via `JwtHandler.IsTokenValidAsync`. An invalid or missing token
-   produces a 401 with an `"Invalid token"` error.
-4. Resolves an `AuthenticatedUser` according to `JwtAuthenticationOptions.ValidationMode` (below). Success
-   attaches the user to `HttpContext.Items["User"]` and calls the next middleware; failure writes a 401
-   with a descriptive error.
-
-## `JwtValidationMode` — `ClaimsOnly` vs `Revalidate`
+## Registering authentication — `AddTokenAuthentication`
 
 ```csharp
-// Opt into per-request revalidation
-builder.Services.AddSingleton(new JwtAuthenticationOptions
+builder.Services.AddTokenAuthentication(options =>
 {
-    ValidationMode = JwtValidationMode.Revalidate
+    options.Source = TokenSource.Either;  // Header | Cookie | Either — default: Header
+    options.CookieName = "access_token";  // default
+    options.EnableJwt = true;             // default
+    options.EnableGoogle = true;          // default: false
+    options.GoogleClientIds = ["your-google-oauth-client-id"];
+    options.JwtMode = JwtValidationMode.ClaimsOnly; // or Revalidate — default: ClaimsOnly
 });
 ```
+
+`AddTokenAuthentication` registers the `AuthenticationOptions` instance plus one `ITokenValidator` per
+enabled scheme (app JWT first, then Google, so that's the order `AuthenticationMiddleware` tries them
+in). It throws an `ArgumentException` if:
+
+- neither `EnableJwt` nor `EnableGoogle` is `true` — at least one scheme must be enabled; or
+- `EnableGoogle` is `true` but `GoogleClientIds` is empty.
+
+The app must still separately register `JwtConfiguration`/`JwtHandler` (for the JWT scheme) and, when
+required (see below), an `IAuthenticationProvider`.
+
+## `TokenSource` — where the token is read from
+
+`AuthenticationOptions.Source` controls how `AuthenticationMiddleware` extracts the raw token from the
+request, via `TokenExtractor`:
+
+- **`Header` (default)** — the `Authorization` header only. The scheme **must** be `Bearer`
+  (case-insensitive) with a non-empty parameter; any other or malformed scheme is treated as no token.
+- **`Cookie`** — the cookie named `CookieName` (default `"access_token"`) only.
+- **`Either`** — the header first, falling back to the cookie if the header carries no token.
+
+## `AuthenticationMiddleware`
+
+`AuthenticationMiddleware` runs once per request (see [Architecture](/architecture/) for where it sits in
+the pipeline). For each request it:
+
+1. Skips validation entirely for Swagger routes and for endpoints marked `[AllowAnonymous]`.
+2. Extracts the token per `AuthenticationOptions.Source`, as above.
+3. Runs the token through the enabled validators, in registration order (app JWT, then Google). The first
+   validator that resolves an `AuthenticatedUser` wins: it's attached to `HttpContext.Items["User"]` and
+   the next middleware runs.
+4. If no validator resolves a user, the request gets a 401 with the last validator's error (e.g.
+   `"Invalid token"`, `"Invalid Google token"`, `"User not found"`).
+
+## The app JWT scheme — `ClaimsOnly` vs `Revalidate`
+
+When `EnableJwt` is `true`, `JwtTokenValidator` first checks the token's signature via
+`JwtHandler.IsTokenValidAsync`; an invalid or missing token fails with `"Invalid token"`. How the user is
+then resolved is controlled by `AuthenticationOptions.JwtMode`:
 
 - **`ClaimsOnly` (default)** — `AuthenticatedUserFactory.FromToken` rebuilds the user from the token's
   `id` and `role` claims. No data store is queried, so authentication costs nothing beyond the signature
@@ -40,10 +75,31 @@ builder.Services.AddSingleton(new JwtAuthenticationOptions
 - **`Revalidate`** — the user id is read from the token, and `IAuthenticationProvider` is resolved
   **per-request** from `HttpContext.RequestServices` (so it can be a scoped service) and its
   `GetAuthenticatedUserById` is called. This guarantees freshness — a deleted or role-changed user is
-  rejected or updated on the very next request — at the cost of one lookup per request.
+  rejected or updated on the very next request — at the cost of one lookup per request. An
+  `IAuthenticationProvider` **must** be registered for this mode.
 
-If `JwtAuthenticationOptions` isn't registered, `JwtMiddleware` falls back to a default instance, i.e.
-`ClaimsOnly`.
+## Google authentication
+
+When `EnableGoogle` is `true`, `GoogleTokenValidator` verifies the token via `IGoogleTokenVerifier` — by
+default `GoogleTokenVerifier`, backed by `Google.Apis.Auth`'s `GoogleJsonWebSignature`, which checks
+signature, issuer, expiry and audience against `GoogleClientIds`. On success, the token's verified email
+is looked up through `IAuthenticationProvider.GetAuthenticatedUserByEmail`. An `IAuthenticationProvider`
+is therefore **required** whenever `EnableGoogle` is `true` — the same requirement as JWT `Revalidate`
+mode, above.
+
+To accept Google sign-in:
+
+1. Add the `Google.Apis.Auth` package (already a dependency of this library, so it resolves transitively
+   — add it explicitly to your project only if you call its APIs directly).
+2. Set `EnableGoogle = true` and `GoogleClientIds` to your app's accepted OAuth client ID(s)/audiences in
+   the `AddTokenAuthentication` callback.
+3. Implement `IAuthenticationProvider.GetAuthenticatedUserByEmail(string)` on your provider (alongside
+   `GetAuthenticatedUserById` if you also use the JWT scheme) and register it, optionally wrapped with
+   `AddCachedAuthenticationProvider<T>` (below).
+
+`EnableJwt` and `EnableGoogle` are independent — enable both to let a single endpoint accept either an
+app-issued JWT or a Google ID token on the same request path; `AuthenticationMiddleware` figures out which
+one it got by trying each enabled validator in turn.
 
 ## Caching provider lookups
 
@@ -61,17 +117,20 @@ builder.Services.AddCachedAuthenticationProvider<MyAuthenticationProvider>(optio
 
 `AddCachedAuthenticationProvider<TProvider>` registers `TProvider` (your concrete `IAuthenticationProvider`
 implementation) as a scoped service, adds `IMemoryCache`, and registers `IAuthenticationProvider` itself
-as a `CachedAuthenticationProvider` decorating `TProvider`. `CachedAuthenticationProvider.GetAuthenticatedUserById`
-checks the cache first (key `"auth:user:" + id` by default, via `CacheKeyPrefix`); on a miss it delegates
-to the inner provider and caches the result for `Ttl`, but only caches a `null` result (a miss) when
-`CacheMisses` is `true`. This bounds staleness to the TTL while collapsing bursts of requests for the same
-user into a single store hit — `JwtMiddleware` and your own code both see it as a plain
-`IAuthenticationProvider` and don't need to know caching is happening.
+as a `CachedAuthenticationProvider` decorating `TProvider`. Both provider methods are cached independently:
+`GetAuthenticatedUserById` checks the cache first (key `"auth:user:" + id` by default, via
+`CacheKeyPrefix`), and `GetAuthenticatedUserByEmail` does the same keyed by email (`"auth:email:" + email`
+by default, via `EmailCacheKeyPrefix`). On a miss, each delegates to the inner provider and caches the
+result for `Ttl`, but only caches a `null` result (a miss) when `CacheMisses` is `true`. This bounds
+staleness to the TTL while collapsing bursts of requests for the same user into a single store hit —
+`AuthenticationMiddleware` (for both the JWT `Revalidate` and Google schemes) and your own code both see
+it as a plain `IAuthenticationProvider` and don't need to know caching is happening.
 
 ## Identity types
 
 - **`AuthenticatedUser(int Id, int Role)`** — the record attached to `HttpContext.Items["User"]` after
-  successful authentication, and returned by `IAuthenticationProvider.GetAuthenticatedUserById`.
+  successful authentication, and returned by both `IAuthenticationProvider.GetAuthenticatedUserById` and
+  `IAuthenticationProvider.GetAuthenticatedUserByEmail`.
 - **`TokenClaimKeys`** — the claim key constants used on both ends of the token: `Id = "id"`,
   `Role = "role"`.
 - **`AuthenticationExtensions.ToTokenClaims(this AuthenticatedUser)`** — converts an `AuthenticatedUser`
@@ -80,7 +139,7 @@ user into a single store hit — `JwtMiddleware` and your own code both see it a
 - **`AuthenticatedUserFactory.FromToken(string token)`** — reads a token's `id`/`role` claims (without
   validating its signature — callers must have already done that) and returns the reconstructed
   `AuthenticatedUser`, or `null` if the token can't be read or is missing a numeric `id` or `role` claim.
-  This is what `JwtMiddleware` calls in `ClaimsOnly` mode.
+  This is what `JwtTokenValidator` calls in `ClaimsOnly` mode.
 
 ```mermaid
 flowchart LR
@@ -115,11 +174,11 @@ public class AccountsController : ControllerBase
   honors `[AllowAnonymous]` — an anonymous-marked action returns immediately without a role check, even
   under `[RoleRequirement(...)]`.
 - **`[AllowAnonymous]`** — a plain marker attribute; it doesn't enforce anything itself, but
-  `JwtMiddleware`, `AuthorizeAttribute` and `RoleRequirementFilter` all check for it and skip their own
-  enforcement when it's present on the action.
+  `AuthenticationMiddleware`, `AuthorizeAttribute` and `RoleRequirementFilter` all check for it and skip
+  their own enforcement when it's present on the action.
 
 Because both filters read `HttpContext.Items["User"]` rather than re-validating the token themselves,
-`[Authorize]`/`[RoleRequirement]` only make sense downstream of `JwtMiddleware` — see
+`[Authorize]`/`[RoleRequirement]` only make sense downstream of `AuthenticationMiddleware` — see
 [Architecture](/architecture/) for how the two fit together.
 
 ## `Credentials` and validation
@@ -158,9 +217,9 @@ revocations bounded.
 
 ## Where to next
 
-- **[Architecture](/dotnet-webapi-util/architecture)** — the full token → `JwtMiddleware` → `Items["User"]` →
-  authorization-filter flow, alongside the rest of the pipeline.
-- **[Configuration](/dotnet-webapi-util/configuration)** — registering `JwtMiddleware` via `AddMiddlewares` and wiring up
-  `ConfigureSecurity()`.
+- **[Architecture](/dotnet-webapi-util/architecture)** — the full token → `AuthenticationMiddleware` →
+  `Items["User"]` → authorization-filter flow, alongside the rest of the pipeline.
+- **[Configuration](/dotnet-webapi-util/configuration)** — registering `AuthenticationMiddleware` via `AddMiddlewares`
+  and wiring up `ConfigureSecurity()`.
 - **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — how `ExceptionMiddleware` and
-  `TraceActivityMiddleware` relate to the rest of the pipeline `JwtMiddleware` runs in.
+  `TraceActivityMiddleware` relate to the rest of the pipeline `AuthenticationMiddleware` runs in.
