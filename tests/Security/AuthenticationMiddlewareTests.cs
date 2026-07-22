@@ -100,6 +100,7 @@ public class AuthenticationMiddlewareTests
 
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Empty(log.ToString());
+        Assert.Contains("Invalid token", await ReadBody(context));
     }
 
     [Fact]
@@ -122,7 +123,7 @@ public class AuthenticationMiddlewareTests
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
         var provider = new StubProvider(byEmail: new AuthenticatedUser(7, 2));
         var (context, log) = BuildContext("google.id.token", provider);
-        var google = new GoogleTokenValidator(new FakeVerifier(new GoogleTokenPayload("u@e.com", "sub")), options);
+        var google = new GoogleTokenValidator(new FakeVerifier(new GoogleTokenPayload("u@e.com", "sub", true)), options);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options), google]);
 
         await middleware.InvokeAsync(context);

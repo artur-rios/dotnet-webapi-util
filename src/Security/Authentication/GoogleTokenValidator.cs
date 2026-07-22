@@ -26,6 +26,11 @@ public class GoogleTokenValidator(IGoogleTokenVerifier verifier, AuthenticationO
             return new TokenValidationResult(null, "Google token has no email");
         }
 
+        if (!payload.EmailVerified)
+        {
+            return new TokenValidationResult(null, "Google email not verified");
+        }
+
         var provider = context.RequestServices.GetRequiredService<IAuthenticationProvider>();
         var user = provider.GetAuthenticatedUserByEmail(payload.Email);
 

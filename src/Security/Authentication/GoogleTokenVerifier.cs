@@ -20,7 +20,7 @@ public class GoogleTokenVerifier : IGoogleTokenVerifier
             var settings = new GoogleJsonWebSignature.ValidationSettings { Audience = audiences };
             var payload = await GoogleJsonWebSignature.ValidateAsync(token, settings);
 
-            return new GoogleTokenPayload(payload.Email ?? string.Empty, payload.Subject ?? string.Empty);
+            return new GoogleTokenPayload(payload.Email ?? string.Empty, payload.Subject ?? string.Empty, payload.EmailVerified);
         }
         catch (InvalidJwtException)
         {
