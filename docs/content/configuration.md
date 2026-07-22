@@ -5,7 +5,7 @@ title = 'Configuration'
 # Configuration
 
 `WebApiStartup` is the abstract base class you derive from to bootstrap an ASP.NET Core host:
-configuration loading, logging, Swagger, the middleware pipeline and the invalid-model-state response all
+configuration loading, Swagger, the middleware pipeline and the invalid-model-state response all
 go through a small set of methods on it, some of which you must implement and some of which are optional
 hooks.
 

@@ -5,7 +5,7 @@
 [![NuGet](https://img.shields.io/nuget/v/ArturRios.Util.WebApi.svg)](https://www.nuget.org/packages/ArturRios.Util.WebApi)
 
 Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
-(configuration, logging, Swagger, middleware pipeline), stateless-or-revalidating JWT authentication with
+(configuration, Swagger, middleware pipeline), stateless-or-revalidating JWT authentication with
 role-based authorization, cross-cutting middleware for exceptions and distributed tracing, a thin
 typed-`HttpClient` base for calling other services, and a resolver that turns `ArturRios.Output` envelopes
 into `ActionResult`s.
@@ -22,7 +22,7 @@ Requires **.NET 10**.
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, logging, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/configuration/) |
+| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/configuration/) |
 | Security (JWT + roles) | `JwtMiddleware` validates the bearer token and attaches an `AuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/http-client/) |
