@@ -125,14 +125,13 @@ tracing.&lt;/li&gt;
 configuration.&lt;/li&gt;
 &lt;/ul&gt;</content></item><item><title>Configuration</title><link>https://artur-rios.github.io/dotnet-webapi-util/configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><author>arturdev@duck.com (Artur Rios)</author><guid>https://artur-rios.github.io/dotnet-webapi-util/configuration/</guid><description>&lt;h1 id="configuration"&gt;Configuration&lt;/h1&gt;
 &lt;p&gt;&lt;code&gt;WebApiStartup&lt;/code&gt; is the abstract base class you derive from to bootstrap an ASP.NET Core host:
-configuration loading, logging, Swagger, the middleware pipeline and the invalid-model-state response all
+configuration loading, Swagger, the middleware pipeline and the invalid-model-state response all
 go through a small set of methods on it, some of which you must implement and some of which are optional
 hooks.&lt;/p&gt;
 &lt;h2 id="the-lifecycle"&gt;The lifecycle&lt;/h2&gt;
 &lt;pre class="mermaid"&gt;flowchart TB
 New[&amp;#34;new Startup(args)&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;builds WebApplicationBuilder + WebApiParameters&amp;lt;/i&amp;gt;&amp;#34;] --&amp;gt; Build[&amp;#34;Build() — abstract, you implement it&amp;#34;]
 Build --&amp;gt; LoadConfig[&amp;#34;LoadConfiguration()&amp;#34;]
-Build --&amp;gt; Logging[&amp;#34;AddLogging() / AddCustomLogging(...)&amp;#34;]
 Build --&amp;gt; InvalidModel[&amp;#34;AddCustomInvalidModelStateResponse()&amp;#34;]
 Build --&amp;gt; SwaggerGen[&amp;#34;UseSwaggerGen(...)&amp;#34;]
 Build --&amp;gt; Deps[&amp;#34;AddDependencies() — virtual hook&amp;#34;]
@@ -147,14 +146,13 @@ New --&amp;gt; Run[&amp;#34;Run() or BuildAndRun()&amp;#34;]
 &lt;code&gt;WebApiStartup&lt;/code&gt; is either a plain helper method you call from inside them, or a &lt;strong&gt;virtual no-op hook&lt;/strong&gt;
 you can override:&lt;/p&gt;</description><content>&lt;h1 id="configuration"&gt;Configuration&lt;/h1&gt;
 &lt;p&gt;&lt;code&gt;WebApiStartup&lt;/code&gt; is the abstract base class you derive from to bootstrap an ASP.NET Core host:
-configuration loading, logging, Swagger, the middleware pipeline and the invalid-model-state response all
+configuration loading, Swagger, the middleware pipeline and the invalid-model-state response all
 go through a small set of methods on it, some of which you must implement and some of which are optional
 hooks.&lt;/p&gt;
 &lt;h2 id="the-lifecycle"&gt;The lifecycle&lt;/h2&gt;
 &lt;pre class="mermaid"&gt;flowchart TB
 New[&amp;#34;new Startup(args)&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;builds WebApplicationBuilder + WebApiParameters&amp;lt;/i&amp;gt;&amp;#34;] --&amp;gt; Build[&amp;#34;Build() — abstract, you implement it&amp;#34;]
 Build --&amp;gt; LoadConfig[&amp;#34;LoadConfiguration()&amp;#34;]
-Build --&amp;gt; Logging[&amp;#34;AddLogging() / AddCustomLogging(...)&amp;#34;]
 Build --&amp;gt; InvalidModel[&amp;#34;AddCustomInvalidModelStateResponse()&amp;#34;]
 Build --&amp;gt; SwaggerGen[&amp;#34;UseSwaggerGen(...)&amp;#34;]
 Build --&amp;gt; Deps[&amp;#34;AddDependencies() — virtual hook&amp;#34;]
@@ -218,16 +216,6 @@ you can override:&lt;/p&gt;
 &lt;td&gt;Loads &lt;code&gt;appsettings&lt;/code&gt;/env file per &lt;code&gt;WebApiParameters&lt;/code&gt; and registers &lt;code&gt;SettingsProvider&lt;/code&gt;/&lt;code&gt;EnvironmentProvider&lt;/code&gt;.&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;&lt;code&gt;AddLogging()&lt;/code&gt;&lt;/td&gt;
-&lt;td&gt;helper&lt;/td&gt;
-&lt;td&gt;Adds the default ASP.NET Core logging services.&lt;/td&gt;
-&lt;/tr&gt;
-&lt;tr&gt;
-&lt;td&gt;&lt;code&gt;AddCustomLogging(loggerConfigurations)&lt;/code&gt;&lt;/td&gt;
-&lt;td&gt;helper&lt;/td&gt;
-&lt;td&gt;Replaces the default logging providers with a custom logger built from the given configurations.&lt;/td&gt;
-&lt;/tr&gt;
-&lt;tr&gt;
 &lt;td&gt;&lt;code&gt;AddMiddlewares(Type[])&lt;/code&gt;&lt;/td&gt;
 &lt;td&gt;helper&lt;/td&gt;
 &lt;td&gt;Registers each given middleware type on &lt;code&gt;App&lt;/code&gt;, in order, skipping any type that isn&amp;rsquo;t a &lt;code&gt;WebApiMiddleware&lt;/code&gt;.&lt;/td&gt;
@@ -265,7 +253,6 @@ you can override:&lt;/p&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;override&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;void&lt;/span&gt; Build()
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; LoadConfiguration();
-&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AddLogging();
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; AddCustomInvalidModelStateResponse();
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; UseSwaggerGen(jwtAuthentication: &lt;span style="color:#66d9ef"&gt;true&lt;/span&gt;);
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; Builder.Services.AddControllers();
@@ -356,10 +343,11 @@ by default in &lt;code&gt;Development&lt;/code&gt;/&lt;code&gt;Local&lt;/code&gt
 authentication bypass is not active unless you also pass the matching &lt;code&gt;SwaggerEnvironments:[...]&lt;/code&gt;
 argument.&lt;/p&gt;
 &lt;h2 id="logging"&gt;Logging&lt;/h2&gt;
-&lt;p&gt;&lt;code&gt;AddLogging()&lt;/code&gt; wires up the default ASP.NET Core logging providers. &lt;code&gt;AddCustomLogging(loggerConfigurations)&lt;/code&gt;
-instead clears the default providers and registers a custom logger (backed by &lt;code&gt;IStateLogger&lt;/code&gt;) built from
-the given &lt;code&gt;LoggerConfiguration&lt;/code&gt; list, with the minimum level set to &lt;code&gt;Trace&lt;/code&gt;. Use one or the other, not
-both.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;WebApiStartup&lt;/code&gt; no longer configures logging — that is the derived class&amp;rsquo;s responsibility. Because the
+library&amp;rsquo;s logging types depend only on &lt;code&gt;Microsoft.Extensions.Logging.ILogger&amp;lt;T&amp;gt;&lt;/code&gt;, any backend works:
+the default ASP.NET Core providers (already registered by &lt;code&gt;WebApplication.CreateBuilder&lt;/code&gt;), Serilog
+(&lt;code&gt;Builder.Host.UseSerilog(...)&lt;/code&gt;), or a custom &lt;code&gt;ILogger&lt;/code&gt;. Configure whichever you prefer inside your
+&lt;code&gt;Build()&lt;/code&gt; override before calling &lt;code&gt;BuildApp()&lt;/code&gt;.&lt;/p&gt;
 &lt;h2 id="invalid-model-state"&gt;Invalid model state&lt;/h2&gt;
 &lt;p&gt;&lt;code&gt;AddCustomInvalidModelStateResponse()&lt;/code&gt; replaces ASP.NET Core&amp;rsquo;s built-in &lt;code&gt;[ApiController]&lt;/code&gt; validation
 response with a &lt;code&gt;DataOutput&amp;lt;string&amp;gt;&lt;/code&gt;-shaped 400: each invalid model-binding parameter is turned into an
