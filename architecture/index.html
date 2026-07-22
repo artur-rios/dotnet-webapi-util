@@ -9,47 +9,61 @@ middleware type on the app <strong>in the order supplied</strong>, skipping any 
 A typical setup registers the three built-in middlewares in this order:</p><pre class=mermaid>flowchart LR
     Client[&#34;Client request&#34;] --&gt; Trace[&#34;TraceActivityMiddleware&lt;br/&gt;&lt;i&gt;assigns/propagates W3C traceparent&lt;/i&gt;&#34;]
     Trace --&gt; Exception[&#34;ExceptionMiddleware&lt;br/&gt;&lt;i&gt;catches unhandled exceptions&lt;/i&gt;&#34;]
-    Exception --&gt; Jwt[&#34;JwtMiddleware&lt;br/&gt;&lt;i&gt;validates bearer token, attaches AuthenticatedUser&lt;/i&gt;&#34;]
-    Jwt --&gt; Endpoint[&#34;Controller / endpoint&#34;]
+    Exception --&gt; Auth[&#34;AuthenticationMiddleware&lt;br/&gt;&lt;i&gt;validates token, attaches AuthenticatedUser&lt;/i&gt;&#34;]
+    Auth --&gt; Endpoint[&#34;Controller / endpoint&#34;]
     Endpoint --&gt; Resolver[&#34;ResponseResolver&lt;br/&gt;&lt;i&gt;Output envelope → ActionResult&lt;/i&gt;&#34;]
     Resolver --&gt; Client
 </pre><p><code>WebApiMiddleware</code> is an abstract marker base class with no members — its only job is to let
 <code>AddMiddlewares</code> recognize which types are safe to register with <code>App.UseMiddleware(...)</code>:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-csharp data-lang=csharp><span style=display:flex><span>AddMiddlewares([
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>typeof</span>(TraceActivityMiddleware),
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>typeof</span>(ExceptionMiddleware),
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>typeof</span>(JwtMiddleware)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>typeof</span>(AuthenticationMiddleware)
 </span></span><span style=display:flex><span>]);
 </span></span></code></pre></div><p>Because registration order is registration order, <code>TraceActivityMiddleware</code> runs first so the trace id
 is available to everything downstream (including exception logging), <code>ExceptionMiddleware</code> runs next so
-it can catch exceptions thrown by authentication or the endpoint itself, and <code>JwtMiddleware</code> runs last of
-the three so only requests that pass tracing/exception setup pay for token validation.</p><p>See <a href=/middleware-and-diagnostics/>Middleware & Diagnostics</a> for what <code>TraceActivityMiddleware</code> and
+it can catch exceptions thrown by authentication or the endpoint itself, and <code>AuthenticationMiddleware</code>
+runs last of the three so only requests that pass tracing/exception setup pay for token validation.</p><p>See <a href=/middleware-and-diagnostics/>Middleware & Diagnostics</a> for what <code>TraceActivityMiddleware</code> and
 <code>ExceptionMiddleware</code> do in detail, and <a href=/configuration/>Configuration</a> for the full <code>WebApiStartup</code>
-lifecycle.</p><h2 id=security-model>Security model<a href=#security-model class=hanchor arialabel=Anchor>&#8983;</a></h2><p><code>JwtMiddleware</code> validates the bearer token on every request that isn&rsquo;t a Swagger route or an
-<code>[AllowAnonymous]</code> endpoint. What happens next depends on <code>JwtAuthenticationOptions.ValidationMode</code>:</p><pre class=mermaid>flowchart TB
-    Token[&#34;Bearer token&#34;] --&gt; Verify{&#34;Signature valid?&#34;}
-    Verify -- &#34;no&#34; --&gt; R401[&#34;401 Unauthorized&#34;]
-    Verify -- &#34;yes&#34; --&gt; Mode{&#34;ValidationMode&#34;}
-
+lifecycle.</p><h2 id=security-model>Security model<a href=#security-model class=hanchor arialabel=Anchor>&#8983;</a></h2><p><code>AuthenticationMiddleware</code> extracts a token (from the header, a cookie, or either, per
+<code>AuthenticationOptions.Source</code>) and validates it on every request that isn&rsquo;t a Swagger route or an
+<code>[AllowAnonymous]</code> endpoint. Which token schemes are tried, and how, depends on <code>AuthenticationOptions</code>
+(registered via <code>AddTokenAuthentication</code>):</p><pre class=mermaid>flowchart TB
+    Token[&#34;Extracted token&#34;] --&gt; Jwt{&#34;EnableJwt?&#34;}
+    Jwt -- &#34;yes&#34; --&gt; JwtValid{&#34;Signature valid?&#34;}
+    JwtValid -- &#34;no&#34; --&gt; Google
+    JwtValid -- &#34;yes&#34; --&gt; Mode{&#34;JwtMode&#34;}
     Mode -- &#34;ClaimsOnly (default)&#34; --&gt; Claims[&#34;AuthenticatedUserFactory.FromToken&lt;br/&gt;&lt;i&gt;id + role claims, no lookup&lt;/i&gt;&#34;]
-    Mode -- &#34;Revalidate&#34; --&gt; Provider[&#34;IAuthenticationProvider.GetAuthenticatedUserById&lt;br/&gt;&lt;i&gt;resolved per-request from RequestServices&lt;/i&gt;&#34;]
+    Mode -- &#34;Revalidate&#34; --&gt; ProviderId[&#34;IAuthenticationProvider.GetAuthenticatedUserById&lt;br/&gt;&lt;i&gt;resolved per-request from RequestServices&lt;/i&gt;&#34;]
 
-    Provider -.-&gt; Cached[&#34;CachedAuthenticationProvider&lt;br/&gt;&lt;i&gt;IMemoryCache, Ttl / CacheMisses&lt;/i&gt;&#34;]
-    Cached -.-&gt; Provider
+    Jwt -- &#34;no&#34; --&gt; Google{&#34;EnableGoogle?&#34;}
+    Google -- &#34;yes&#34; --&gt; GoogleValid{&#34;Google ID token valid?&#34;}
+    GoogleValid -- &#34;yes&#34; --&gt; ProviderEmail[&#34;IAuthenticationProvider.GetAuthenticatedUserByEmail&#34;]
+    GoogleValid -- &#34;no&#34; --&gt; R401[&#34;401 Unauthorized&#34;]
+    Google -- &#34;no&#34; --&gt; R401
+
+    ProviderId -.-&gt; Cached[&#34;CachedAuthenticationProvider&lt;br/&gt;&lt;i&gt;IMemoryCache, Ttl / CacheMisses&lt;/i&gt;&#34;]
+    ProviderEmail -.-&gt; Cached
+    Cached -.-&gt; ProviderId
+    Cached -.-&gt; ProviderEmail
 
     Claims --&gt; Items[&#34;HttpContext.Items[User]&#34;]
-    Provider --&gt; Items
+    ProviderId --&gt; Items
+    ProviderEmail --&gt; Items
 
     Items --&gt; Authorize[&#34;AuthorizeAttribute&lt;br/&gt;&lt;i&gt;401 if no user&lt;/i&gt;&#34;]
     Authorize --&gt; RoleReq[&#34;RoleRequirementFilter&lt;br/&gt;&lt;i&gt;403 if role not authorized&lt;/i&gt;&#34;]
     RoleReq --&gt; Endpoint[&#34;Controller action&#34;]
-</pre><p><code>ClaimsOnly</code> (the default) never touches a data store — the user is rebuilt straight from the token&rsquo;s
-<code>id</code> and <code>role</code> claims, so authentication costs nothing beyond the signature check. <code>Revalidate</code> instead
-resolves <code>IAuthenticationProvider</code> from the current request&rsquo;s <code>HttpContext.RequestServices</code> and calls
-<code>GetAuthenticatedUserById</code> on every request, trading a lookup for freshness. <code>CachedAuthenticationProvider</code>
-sits transparently in front of any <code>IAuthenticationProvider</code> (registered via
-<code>AddCachedAuthenticationProvider&lt;T></code>) to absorb repeated lookups of the same user within a short TTL,
-without either mode needing to know it&rsquo;s there.</p><p><code>AuthorizeAttribute</code> and <code>RoleRequirementFilter</code> both read the same <code>HttpContext.Items["User"]</code> slot that
-<code>JwtMiddleware</code> populates, and both honor <code>[AllowAnonymous]</code> by short-circuiting before checking it.</p><p>See <a href=/security/>Security</a> for the full authentication and authorization reference.</p><h2 id=response-envelopes>Response envelopes<a href=#response-envelopes class=hanchor arialabel=Anchor>&#8983;</a></h2><p>Endpoints return an <code>ArturRios.Output</code> envelope rather than throwing on failure. <code>ProcessOutput</code> carries
+</pre><p>For the app JWT scheme, <code>ClaimsOnly</code> (the default) never touches a data store — the user is rebuilt
+straight from the token&rsquo;s <code>id</code> and <code>role</code> claims, so authentication costs nothing beyond the signature
+check. <code>Revalidate</code> instead resolves <code>IAuthenticationProvider</code> from the current request&rsquo;s
+<code>HttpContext.RequestServices</code> and calls <code>GetAuthenticatedUserById</code> on every request, trading a lookup for
+freshness. The Google scheme always resolves the user via <code>IAuthenticationProvider.GetAuthenticatedUserByEmail</code>
+after verifying the token, so an <code>IAuthenticationProvider</code> is required whenever Google authentication is
+enabled, just as it is for JWT <code>Revalidate</code>. <code>CachedAuthenticationProvider</code> sits transparently in front of
+any <code>IAuthenticationProvider</code> (registered via <code>AddCachedAuthenticationProvider&lt;T></code>) to absorb repeated
+lookups of the same user within a short TTL, without any mode needing to know it&rsquo;s there.</p><p><code>AuthorizeAttribute</code> and <code>RoleRequirementFilter</code> both read the same <code>HttpContext.Items["User"]</code> slot that
+<code>AuthenticationMiddleware</code> populates, and both honor <code>[AllowAnonymous]</code> by short-circuiting before checking
+it.</p><p>See <a href=/security/>Security</a> for the full authentication and authorization reference.</p><h2 id=response-envelopes>Response envelopes<a href=#response-envelopes class=hanchor arialabel=Anchor>&#8983;</a></h2><p>Endpoints return an <code>ArturRios.Output</code> envelope rather than throwing on failure. <code>ProcessOutput</code> carries
 success/error/message state; <code>DataOutput&lt;T></code> adds a typed payload on top of it:</p><pre class=mermaid>classDiagram
     class ProcessOutput {
         +bool Success
@@ -82,12 +96,12 @@ explicit <code>statusCode</code> is supplied:</p><div class=highlight><pre tabin
 escapes as a thrown exception, not the primary error-reporting path.</li><li><strong>Stateless by default, revalidating when you need it.</strong> <code>JwtValidationMode.ClaimsOnly</code> is the default
 because most requests don&rsquo;t need a fresh database read on every call; <code>Revalidate</code> (optionally cached)
 is there for the cases where staleness — instead of an expired token — is the risk you can&rsquo;t accept.</li><li><strong>Small, focused middlewares.</strong> Each of <code>TraceActivityMiddleware</code>, <code>ExceptionMiddleware</code> and
-<code>JwtMiddleware</code> does exactly one thing and derives from the <code>WebApiMiddleware</code> marker so it can be
-composed via <code>AddMiddlewares</code> in whatever order a given host needs.</li><li><strong>Consistent <code>InvokeAsync</code>.</strong> Every middleware follows the standard ASP.NET Core convention — a
+<code>AuthenticationMiddleware</code> does exactly one thing and derives from the <code>WebApiMiddleware</code> marker so it
+can be composed via <code>AddMiddlewares</code> in whatever order a given host needs.</li><li><strong>Consistent <code>InvokeAsync</code>.</strong> Every middleware follows the standard ASP.NET Core convention — a
 constructor capturing <code>RequestDelegate next</code> plus other dependencies, and a single <code>InvokeAsync(HttpContext)</code>
-method — so custom middlewares slot into <code>AddMiddlewares</code> the same way the built-in ones do.</li><li><strong>DI-first.</strong> Dependencies such as <code>IAuthenticationProvider</code>, <code>JwtAuthenticationOptions</code> and
-<code>SettingsProvider</code> are resolved through the container (constructor injection or, for per-request
-freshness, <code>HttpContext.RequestServices</code>) rather than passed around manually.</li></ul><h2 id=where-to-next>Where to next<a href=#where-to-next class=hanchor arialabel=Anchor>&#8983;</a></h2><ul><li><strong><a href=/dotnet-webapi-util/configuration>Configuration</a></strong> — the <code>WebApiStartup</code> lifecycle and <code>WebApiParameters</code>.</li><li><strong><a href=/dotnet-webapi-util/security>Security</a></strong> — JWT validation modes, caching, and role-based authorization in depth.</li><li><strong><a href=/dotnet-webapi-util/middleware-and-diagnostics>Middleware & Diagnostics</a></strong> — exception handling and distributed
+method — so custom middlewares slot into <code>AddMiddlewares</code> the same way the built-in ones do.</li><li><strong>DI-first.</strong> Dependencies such as <code>IAuthenticationProvider</code>, <code>AuthenticationOptions</code>, the
+<code>ITokenValidator</code>s and <code>SettingsProvider</code> are resolved through the container (constructor injection or,
+for per-request freshness, <code>HttpContext.RequestServices</code>) rather than passed around manually.</li></ul><h2 id=where-to-next>Where to next<a href=#where-to-next class=hanchor arialabel=Anchor>&#8983;</a></h2><ul><li><strong><a href=/dotnet-webapi-util/configuration>Configuration</a></strong> — the <code>WebApiStartup</code> lifecycle and <code>WebApiParameters</code>.</li><li><strong><a href=/dotnet-webapi-util/security>Security</a></strong> — JWT validation modes, caching, and role-based authorization in depth.</li><li><strong><a href=/dotnet-webapi-util/middleware-and-diagnostics>Middleware & Diagnostics</a></strong> — exception handling and distributed
 tracing.</li><li><strong><a href=/dotnet-webapi-util/http-client>HTTP Client</a></strong> — building typed clients on top of <code>BaseWebApiClient</code>.</li><li><strong><a href=/dotnet-webapi-util/responses>Responses</a></strong> — the full <code>ResponseResolver</code> mapping reference.</li><li><strong><a href=/dotnet-webapi-util/endpoint-toggle>Endpoint Toggling</a></strong> — enabling or disabling individual endpoints from code or
 configuration.</li></ul></div></div></article></div><footer class=footer><div class=footer__inner><div class=copyright><span>© 2026 Powered by <a href=https://gohugo.io>Hugo</a></span>
 <span><a href=https://github.com/mirus-ua/hugo-theme-re-terminal target=_blank>Original theme</a> made by <a href=https://github.com/mirus-ua target=_blank>Mirus</a></span>

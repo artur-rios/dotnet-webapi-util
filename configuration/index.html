@@ -39,7 +39,7 @@ you can override:</p><table><thead><tr><th>Member</th><th>Kind</th><th>Purpose</
 </span></span><span style=display:flex><span>        AddMiddlewares([
 </span></span><span style=display:flex><span>            <span style=color:#66d9ef>typeof</span>(TraceActivityMiddleware),
 </span></span><span style=display:flex><span>            <span style=color:#66d9ef>typeof</span>(ExceptionMiddleware),
-</span></span><span style=display:flex><span>            <span style=color:#66d9ef>typeof</span>(JwtMiddleware)
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>typeof</span>(AuthenticationMiddleware)
 </span></span><span style=display:flex><span>        ]);
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span>        UseSwagger();
@@ -60,8 +60,8 @@ parsed to at least one valid environment name.</li><li>Otherwise, the built-in d
 empty list, in practice Swagger&rsquo;s on/off state is always decided by one of the first two rules — there
 is no separate <code>appsettings.json</code> toggle you need to flip to turn Swagger on or off.</p><p><code>AppSettingsKeys.SwaggerEnabled</code> (<code>"Swagger:Enabled"</code>) is a separate internal marker, and it is set only
 when you pass an explicit <code>SwaggerEnvironments:[...]</code> argument that includes the current environment
-(the marker uses the raw argument, not the <code>[Development, Local]</code> fallback). <code>JwtMiddleware</code> reads this
-marker to recognize <code>/swagger</code> routes and skip authentication on them. This means Swagger can be <em>served</em>
+(the marker uses the raw argument, not the <code>[Development, Local]</code> fallback). <code>AuthenticationMiddleware</code>
+reads this marker to recognize <code>/swagger</code> routes and skip authentication on them. This means Swagger can be <em>served</em>
 by default in <code>Development</code>/<code>Local</code> without the marker being set — in that case the <code>/swagger</code>
 authentication bypass is not active unless you also pass the matching <code>SwaggerEnvironments:[...]</code>
 argument.</p><h2 id=logging>Logging<a href=#logging class=hanchor arialabel=Anchor>&#8983;</a></h2><p><code>WebApiStartup</code> no longer configures logging — that is the derived class&rsquo;s responsibility. Because the
