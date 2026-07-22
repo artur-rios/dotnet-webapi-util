@@ -2,10 +2,6 @@
 using ArturRios.Configuration.Loaders;
 using ArturRios.Configuration.Providers;
 using ArturRios.Extensions;
-using ArturRios.Logging;
-using ArturRios.Logging.Adapter;
-using ArturRios.Logging.Configuration;
-using ArturRios.Logging.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -21,7 +17,7 @@ namespace ArturRios.Util.WebApi.Configuration;
 
 /// <summary>
 /// Base class for bootstrapping an ASP.NET Core web API: builds the <see cref="WebApplicationBuilder"/> and
-/// <see cref="WebApplication"/>, wires up configuration, logging, middlewares and Swagger, and exposes hooks
+/// <see cref="WebApplication"/>, wires up configuration, middlewares and Swagger, and exposes hooks
 /// (<see cref="Build"/>, <see cref="ConfigureApp"/>, <see cref="AddDependencies"/>, etc.) for derived classes
 /// to customize the pipeline.
 /// </summary>
@@ -94,23 +90,6 @@ public abstract class WebApiStartup(string[] args)
 
     /// <summary>Starts background or hosted services. Override to start custom services.</summary>
     public virtual void StartServices() { }
-
-    /// <summary>Adds the default ASP.NET Core logging services.</summary>
-    public void AddLogging() => Builder.Services.AddLogging();
-
-    /// <summary>Replaces the default logging providers with the custom logger built from <paramref name="loggerConfigurations"/>.</summary>
-    /// <param name="loggerConfigurations">The logger configurations to apply.</param>
-    public void AddCustomLogging(List<LoggerConfiguration> loggerConfigurations)
-    {
-        Builder.Services.AddScoped<IStateLogger>(_ => new StateLogger(loggerConfigurations));
-
-        Builder.Services.AddLogging(lb =>
-        {
-            lb.ClearProviders();
-            lb.AddCustomLogger();
-            lb.SetMinimumLevel(LogLevel.Trace);
-        });
-    }
 
     /// <summary>Loads application settings and/or the environment file according to <see cref="Parameters"/>,
     /// and registers the resulting <see cref="SettingsProvider"/>/<see cref="EnvironmentProvider"/> as services.</summary>
