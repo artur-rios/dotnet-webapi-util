@@ -23,7 +23,6 @@
   <ItemGroup>
     <PackageReference Include="ArturRios.Configuration" Version="1.0.0" />
     <PackageReference Include="ArturRios.Jwt" Version="1.0.0" />
-    <PackageReference Include="ArturRios.Logging" Version="1.0.0" />
     <PackageReference Include="ArturRios.Util" Version="1.2.0" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
