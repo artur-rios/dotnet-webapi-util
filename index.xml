@@ -810,25 +810,47 @@ never has to hand-pick a status code for the happy and unhappy paths itself.&lt;
 &lt;p&gt;Each wraps the envelope in an &lt;code&gt;ObjectResult&lt;/code&gt; whose &lt;code&gt;StatusCode&lt;/code&gt; is set from the resolved status code —
 none of the three re-shape or otherwise touch the envelope itself; the body returned to the client is the
 same object you passed in.&lt;/p&gt;
-&lt;h2 id="default-status-mapping"&gt;Default status mapping&lt;/h2&gt;
-&lt;p&gt;Every overload resolves its HTTP status the same way:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;statusCode&lt;/code&gt; supplied&lt;/strong&gt; — used as-is, regardless of the envelope&amp;rsquo;s &lt;code&gt;Success&lt;/code&gt; value.&lt;/li&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;statusCode&lt;/code&gt; omitted&lt;/strong&gt; — defaults to &lt;strong&gt;200&lt;/strong&gt; when the envelope&amp;rsquo;s &lt;code&gt;Success&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt;, and &lt;strong&gt;400&lt;/strong&gt;
-otherwise.&lt;/li&gt;
-&lt;/ul&gt;
+&lt;h2 id="status-resolution-order"&gt;Status resolution order&lt;/h2&gt;
+&lt;p&gt;Every overload also accepts an optional &lt;code&gt;statusMap&lt;/code&gt; — an
+&lt;code&gt;IReadOnlyDictionary&amp;lt;string, int&amp;gt;&lt;/code&gt; from an envelope message to an HTTP status code — and
+resolves its status the same way:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;statusCode&lt;/code&gt; supplied&lt;/strong&gt; — used as-is, regardless of the envelope&amp;rsquo;s &lt;code&gt;Success&lt;/code&gt; value or
+the map.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;statusMap&lt;/code&gt; supplied&lt;/strong&gt; — the lookup key is the &lt;strong&gt;first &lt;code&gt;Errors&lt;/code&gt; entry&lt;/strong&gt; when &lt;code&gt;Success&lt;/code&gt;
+is &lt;code&gt;false&lt;/code&gt;, or the &lt;strong&gt;first &lt;code&gt;Messages&lt;/code&gt; entry&lt;/strong&gt; when &lt;code&gt;Success&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt;. If that key is
+present in the map, its value is used.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Otherwise&lt;/strong&gt; — no map, an empty list, or a key not found — defaults to &lt;strong&gt;200&lt;/strong&gt; when
+&lt;code&gt;Success&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt; and &lt;strong&gt;400&lt;/strong&gt; otherwise.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;The caller owns the dictionary, so its key comparer controls matching — build it with
+&lt;code&gt;StringComparer.OrdinalIgnoreCase&lt;/code&gt; for case-insensitive keys.&lt;/p&gt;
 &lt;pre class="mermaid"&gt;flowchart LR
-Output[&amp;#34;DataOutput / ProcessOutput / PaginatedOutput&amp;#34;] --&amp;gt; Resolve[&amp;#34;ResponseResolver.Resolve(output, statusCode?)&amp;#34;]
+Output[&amp;#34;DataOutput / ProcessOutput / PaginatedOutput&amp;#34;] --&amp;gt; Resolve[&amp;#34;ResponseResolver.Resolve(output, statusCode?, statusMap?)&amp;#34;]
 Resolve --&amp;gt; HasCode{&amp;#34;statusCode supplied?&amp;#34;}
 HasCode -- &amp;#34;yes&amp;#34; --&amp;gt; UseCode[&amp;#34;Use statusCode as-is&amp;#34;]
-HasCode -- &amp;#34;no&amp;#34; --&amp;gt; Success{&amp;#34;output.Success?&amp;#34;}
+HasCode -- &amp;#34;no&amp;#34; --&amp;gt; HasMap{&amp;#34;statusMap supplied?&amp;#34;}
+HasMap -- &amp;#34;yes&amp;#34; --&amp;gt; Lookup{&amp;#34;first error/message in map?&amp;#34;}
+Lookup -- &amp;#34;yes&amp;#34; --&amp;gt; UseMapped[&amp;#34;Use mapped status&amp;#34;]
+Lookup -- &amp;#34;no&amp;#34; --&amp;gt; Success{&amp;#34;output.Success?&amp;#34;}
+HasMap -- &amp;#34;no&amp;#34; --&amp;gt; Success
 Success -- &amp;#34;true&amp;#34; --&amp;gt; Ok[&amp;#34;200&amp;#34;]
 Success -- &amp;#34;false&amp;#34; --&amp;gt; Bad[&amp;#34;400&amp;#34;]
 UseCode --&amp;gt; Result[&amp;#34;ObjectResult&amp;#34;]
+UseMapped --&amp;gt; Result
 Ok --&amp;gt; Result
 Bad --&amp;gt; Result
 &lt;/pre&gt;
-&lt;p&gt;This means a failed operation that should still return, say, a 404 or 409 rather than a generic 400 just
+&lt;p&gt;To map specific errors to specific statuses without branching in the action, pass a
+&lt;code&gt;statusMap&lt;/code&gt; keyed on the envelope&amp;rsquo;s first error:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;var&lt;/span&gt; statusMap = &lt;span style="color:#66d9ef"&gt;new&lt;/span&gt; Dictionary&amp;lt;&lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;, &lt;span style="color:#66d9ef"&gt;int&lt;/span&gt;&amp;gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [&amp;#34;User not found&amp;#34;]&lt;/span&gt; = &lt;span style="color:#ae81ff"&gt;404&lt;/span&gt;,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt; [&amp;#34;Email already registered&amp;#34;]&lt;/span&gt; = &lt;span style="color:#ae81ff"&gt;409&lt;/span&gt;,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;};
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; ResponseResolver.Resolve(output, statusMap: statusMap);
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This means a failed operation that should still return, say, a 404 or 409 rather than a generic 400 just
 needs an explicit &lt;code&gt;statusCode&lt;/code&gt;:&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; ResponseResolver.Resolve(output, statusCode: &lt;span style="color:#ae81ff"&gt;404&lt;/span&gt;);
 &lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="pairing-with-the-envelopes"&gt;Pairing with the envelopes&lt;/h2&gt;
