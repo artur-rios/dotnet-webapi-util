@@ -22,25 +22,52 @@ Each wraps the envelope in an `ObjectResult` whose `StatusCode` is set from the 
 none of the three re-shape or otherwise touch the envelope itself; the body returned to the client is the
 same object you passed in.
 
-## Default status mapping
+## Status resolution order
 
-Every overload resolves its HTTP status the same way:
+Every overload also accepts an optional `statusMap` — an
+`IReadOnlyDictionary<string, int>` from an envelope message to an HTTP status code — and
+resolves its status the same way:
 
-- **`statusCode` supplied** — used as-is, regardless of the envelope's `Success` value.
-- **`statusCode` omitted** — defaults to **200** when the envelope's `Success` is `true`, and **400**
-  otherwise.
+1. **`statusCode` supplied** — used as-is, regardless of the envelope's `Success` value or
+   the map.
+2. **`statusMap` supplied** — the lookup key is the **first `Errors` entry** when `Success`
+   is `false`, or the **first `Messages` entry** when `Success` is `true`. If that key is
+   present in the map, its value is used.
+3. **Otherwise** — no map, an empty list, or a key not found — defaults to **200** when
+   `Success` is `true` and **400** otherwise.
+
+The caller owns the dictionary, so its key comparer controls matching — build it with
+`StringComparer.OrdinalIgnoreCase` for case-insensitive keys.
 
 ```mermaid
 flowchart LR
-    Output["DataOutput / ProcessOutput / PaginatedOutput"] --> Resolve["ResponseResolver.Resolve(output, statusCode?)"]
+    Output["DataOutput / ProcessOutput / PaginatedOutput"] --> Resolve["ResponseResolver.Resolve(output, statusCode?, statusMap?)"]
     Resolve --> HasCode{"statusCode supplied?"}
     HasCode -- "yes" --> UseCode["Use statusCode as-is"]
-    HasCode -- "no" --> Success{"output.Success?"}
+    HasCode -- "no" --> HasMap{"statusMap supplied?"}
+    HasMap -- "yes" --> Lookup{"first error/message in map?"}
+    Lookup -- "yes" --> UseMapped["Use mapped status"]
+    Lookup -- "no" --> Success{"output.Success?"}
+    HasMap -- "no" --> Success
     Success -- "true" --> Ok["200"]
     Success -- "false" --> Bad["400"]
     UseCode --> Result["ObjectResult"]
+    UseMapped --> Result
     Ok --> Result
     Bad --> Result
+```
+
+To map specific errors to specific statuses without branching in the action, pass a
+`statusMap` keyed on the envelope's first error:
+
+```csharp
+var statusMap = new Dictionary<string, int>
+{
+    ["User not found"] = 404,
+    ["Email already registered"] = 409,
+};
+
+return ResponseResolver.Resolve(output, statusMap: statusMap);
 ```
 
 This means a failed operation that should still return, say, a 404 or 409 rather than a generic 400 just
