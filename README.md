@@ -105,7 +105,7 @@ a user wins.
 
 For the app JWT, how the user is resolved is controlled by `AuthenticationOptions.JwtMode`:
 
-- **`ClaimsOnly` (default)** — the user is rebuilt from the token's `id` and `role` claims. No data
+- **`ClaimsOnly` (default)** — the registered mapper rebuilds the user from the token's claims. No data
   store is queried, so authentication costs nothing beyond the signature check. Because nothing is
   re-checked server-side, role changes and revocations only take effect once the token expires — keep
   access-token lifetimes short and use refresh tokens.

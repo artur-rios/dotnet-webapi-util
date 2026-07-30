@@ -80,12 +80,13 @@ flowchart TB
     RoleReq --> Endpoint["Controller action"]
 ```
 
-For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the user is rebuilt
-straight from the token's claims by the registered mapper, so authentication costs nothing beyond the signature
+For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the registered mapper
+rebuilds the user straight from the token's claims, so authentication costs nothing beyond the signature
 check. `Revalidate` instead resolves `IAuthenticationProvider` from the current request's
 `HttpContext.RequestServices` and calls `GetAuthenticatedUserById` with the Guid from the token's claims
-on every request, trading a lookup for freshness. The Google scheme always resolves the user via `IAuthenticationProvider.GetAuthenticatedUserByEmail`
-after verifying the token, so an `IAuthenticationProvider` is required whenever Google authentication is
+on every request, trading a lookup for freshness. The Google scheme always resolves the user via
+`IAuthenticationProvider.GetAuthenticatedUserByEmail` after verifying the token, so an
+`IAuthenticationProvider` is required whenever Google authentication is
 enabled, just as it is for JWT `Revalidate`. `CachedAuthenticationProvider` sits transparently in front of
 any `IAuthenticationProvider` (registered via `AddCachedAuthenticationProvider<T>`) to absorb repeated
 lookups of the same user within a short TTL, without any mode needing to know it's there.
