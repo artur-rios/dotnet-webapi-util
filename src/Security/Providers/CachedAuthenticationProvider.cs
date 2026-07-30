@@ -17,7 +17,7 @@ public class CachedAuthenticationProvider(
     private readonly CachedAuthenticationProviderOptions _options = options ?? new CachedAuthenticationProviderOptions();
 
     /// <inheritdoc />
-    public AuthenticatedUser? GetAuthenticatedUserById(int id)
+    public AuthenticatedUser? GetAuthenticatedUserById(string id)
     {
         var key = $"{_options.CacheKeyPrefix}{id}";
 

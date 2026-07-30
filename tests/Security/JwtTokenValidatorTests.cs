@@ -16,7 +16,15 @@ public class JwtTokenValidatorTests
 
     private sealed class StubProvider(AuthenticatedUser? byId) : IAuthenticationProvider
     {
-        public AuthenticatedUser? GetAuthenticatedUserById(int id) => byId;
+        public string? LastId { get; private set; }
+
+        public AuthenticatedUser? GetAuthenticatedUserById(string id)
+        {
+            LastId = id;
+
+            return byId;
+        }
+
         public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
     }
 
@@ -43,11 +51,11 @@ public class JwtTokenValidatorTests
     [Fact]
     public async Task ClaimsOnly_ReturnsUserFromClaims()
     {
-        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
+        var token = CreateToken(new AuthenticatedUser("42", 3).ToTokenClaims());
         var result = await Validator(JwtValidationMode.ClaimsOnly).ValidateAsync(token, ContextWithProvider(null));
 
         Assert.NotNull(result.User);
-        Assert.Equal(42, result.User!.Id);
+        Assert.Equal("42", result.User!.Id);
         Assert.Equal(3, result.User.Role);
     }
 
@@ -63,8 +71,8 @@ public class JwtTokenValidatorTests
     [Fact]
     public async Task Revalidate_ResolvesUserFromProvider()
     {
-        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
-        var provider = new StubProvider(new AuthenticatedUser(42, 9));
+        var token = CreateToken(new AuthenticatedUser("42", 3).ToTokenClaims());
+        var provider = new StubProvider(new AuthenticatedUser("42", 9));
         var result = await Validator(JwtValidationMode.Revalidate).ValidateAsync(token, ContextWithProvider(provider));
 
         Assert.NotNull(result.User);
@@ -72,9 +80,33 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
+    public async Task Revalidate_LooksUpNonNumericIdFromClaims()
+    {
+        const string id = "3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90";
+        var token = CreateToken(new AuthenticatedUser(id, 3).ToTokenClaims());
+        var provider = new StubProvider(new AuthenticatedUser(id, 9));
+        var result = await Validator(JwtValidationMode.Revalidate).ValidateAsync(token, ContextWithProvider(provider));
+
+        Assert.Equal(id, provider.LastId);
+        Assert.Equal(id, result.User!.Id);
+    }
+
+    [Fact]
+    public async Task Revalidate_ReturnsError_WhenTokenHasNoIdClaim()
+    {
+        var token = CreateToken(new Dictionary<string, string> { { "role", "3" } });
+        var provider = new StubProvider(new AuthenticatedUser("42", 9));
+        var result = await Validator(JwtValidationMode.Revalidate).ValidateAsync(token, ContextWithProvider(provider));
+
+        Assert.Null(result.User);
+        Assert.Equal("Could not retrieve user id from token", result.Error);
+        Assert.Null(provider.LastId);
+    }
+
+    [Fact]
     public async Task Revalidate_ReturnsUserNotFound_WhenProviderReturnsNull()
     {
-        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
+        var token = CreateToken(new AuthenticatedUser("42", 3).ToTokenClaims());
         var result = await Validator(JwtValidationMode.Revalidate).ValidateAsync(token, ContextWithProvider(new StubProvider(null)));
 
         Assert.Null(result.User);

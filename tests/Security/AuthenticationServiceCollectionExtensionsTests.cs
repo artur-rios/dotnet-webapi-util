@@ -11,7 +11,7 @@ public class AuthenticationServiceCollectionExtensionsTests
 {
     private sealed class FakeAuthenticationProvider : IAuthenticationProvider
     {
-        public AuthenticatedUser? GetAuthenticatedUserById(int id) => new(id, 1);
+        public AuthenticatedUser? GetAuthenticatedUserById(string id) => new(id, 1);
         public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
     }
 
@@ -28,8 +28,8 @@ public class AuthenticationServiceCollectionExtensionsTests
 
         var resolved = scope.ServiceProvider.GetRequiredService<IAuthenticationProvider>();
 
-        var user = Assert.IsType<CachedAuthenticationProvider>(resolved).GetAuthenticatedUserById(7);
-        Assert.Equal(7, user!.Id);
+        var user = Assert.IsType<CachedAuthenticationProvider>(resolved).GetAuthenticatedUserById("7");
+        Assert.Equal("7", user!.Id);
     }
 
     [Fact]

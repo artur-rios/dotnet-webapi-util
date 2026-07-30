@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Records;
 
@@ -17,26 +18,48 @@ public static class AuthenticatedUserFactory
     /// </summary>
     /// <param name="token">The JWT to read. Its signature is not validated here.</param>
     /// <returns>
-    /// The reconstructed user, or <see langword="null"/> if the token cannot be read or is missing a
-    /// numeric <c>id</c> or <c>role</c> claim.
+    /// The reconstructed user, or <see langword="null"/> if the token cannot be read, has a blank
+    /// <c>id</c> claim, or is missing a numeric <c>role</c> claim.
     /// </returns>
     public static AuthenticatedUser? FromToken(string token)
     {
-        if (string.IsNullOrWhiteSpace(token) || !Handler.CanReadToken(token))
+        var claims = ReadClaims(token);
+
+        if (claims is null)
         {
             return null;
         }
 
-        var claims = Handler.ReadJwtToken(token).Claims.ToArray();
+        var id = ClaimValue(claims, TokenClaimKeys.Id);
+        var roleClaim = ClaimValue(claims, TokenClaimKeys.Role);
 
-        var idClaim = claims.FirstOrDefault(claim => claim.Type == TokenClaimKeys.Id)?.Value;
-        var roleClaim = claims.FirstOrDefault(claim => claim.Type == TokenClaimKeys.Role)?.Value;
-
-        if (!int.TryParse(idClaim, out var id) || !int.TryParse(roleClaim, out var role))
+        if (string.IsNullOrWhiteSpace(id) || !int.TryParse(roleClaim, out var role))
         {
             return null;
         }
 
         return new AuthenticatedUser(id, role);
     }
+
+    /// <summary>
+    /// Reads just the user id from the token's <c>id</c> claim, for callers that resolve the rest of the
+    /// user from a data store.
+    /// </summary>
+    /// <param name="token">The JWT to read. Its signature is not validated here.</param>
+    /// <returns>The user id, or <see langword="null"/> if the token cannot be read or its <c>id</c> claim is blank.</returns>
+    public static string? IdFromToken(string token)
+    {
+        var claims = ReadClaims(token);
+        var id = claims is null ? null : ClaimValue(claims, TokenClaimKeys.Id);
+
+        return string.IsNullOrWhiteSpace(id) ? null : id;
+    }
+
+    private static Claim[]? ReadClaims(string token) =>
+        string.IsNullOrWhiteSpace(token) || !Handler.CanReadToken(token)
+            ? null
+            : Handler.ReadJwtToken(token).Claims.ToArray();
+
+    private static string? ClaimValue(Claim[] claims, string key) =>
+        claims.FirstOrDefault(claim => claim.Type == key)?.Value;
 }

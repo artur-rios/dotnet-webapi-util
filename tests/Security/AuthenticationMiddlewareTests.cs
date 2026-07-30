@@ -21,7 +21,7 @@ public class AuthenticationMiddlewareTests
 
     private sealed class StubProvider(AuthenticatedUser? byId = null, AuthenticatedUser? byEmail = null) : IAuthenticationProvider
     {
-        public AuthenticatedUser? GetAuthenticatedUserById(int id) => byId;
+        public AuthenticatedUser? GetAuthenticatedUserById(string id) => byId;
         public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => byEmail;
     }
 
@@ -78,14 +78,14 @@ public class AuthenticationMiddlewareTests
     public async Task Jwt_ClaimsOnly_SetsUserAndCallsNext()
     {
         var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
-        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
+        var token = CreateToken(new AuthenticatedUser("42", 3).ToTokenClaims());
         var (context, log) = BuildContext(token, provider: null);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
 
         await middleware.InvokeAsync(context);
 
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
-        Assert.Equal(42, user.Id);
+        Assert.Equal("42", user.Id);
         Assert.Equal("next", log.ToString());
     }
 
@@ -107,7 +107,7 @@ public class AuthenticationMiddlewareTests
     public async Task CookieSource_ReadsTokenFromCookie()
     {
         var options = new AuthenticationOptions { Source = TokenSource.Cookie, CookieName = "access_token" };
-        var token = CreateToken(new AuthenticatedUser(1, 1).ToTokenClaims());
+        var token = CreateToken(new AuthenticatedUser("1", 1).ToTokenClaims());
         var (context, log) = BuildContext(headerToken: null, provider: null, cookieName: "access_token", cookieValue: token);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
 
@@ -121,7 +121,7 @@ public class AuthenticationMiddlewareTests
     public async Task BothEnabled_AcceptsGoogleToken_WhenNotAJwt()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
-        var provider = new StubProvider(byEmail: new AuthenticatedUser(7, 2));
+        var provider = new StubProvider(byEmail: new AuthenticatedUser("7", 2));
         var (context, log) = BuildContext("google.id.token", provider);
         var google = new GoogleTokenValidator(new FakeVerifier(new GoogleTokenPayload("u@e.com", "sub", true)), options);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options), google]);
@@ -130,14 +130,14 @@ public class AuthenticationMiddlewareTests
 
         Assert.Equal("next", log.ToString());
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
-        Assert.Equal(7, user.Id);
+        Assert.Equal("7", user.Id);
     }
 
     [Fact]
     public async Task BothEnabled_AcceptsAppJwt()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
-        var token = CreateToken(new AuthenticatedUser(11, 1).ToTokenClaims());
+        var token = CreateToken(new AuthenticatedUser("11", 1).ToTokenClaims());
         var (context, log) = BuildContext(token, provider: null);
         var google = new GoogleTokenValidator(new FakeVerifier(payload: null), options);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options), google]);
@@ -145,7 +145,7 @@ public class AuthenticationMiddlewareTests
         await middleware.InvokeAsync(context);
 
         Assert.Equal("next", log.ToString());
-        Assert.Equal(11, Assert.IsType<AuthenticatedUser>(context.Items["User"]).Id);
+        Assert.Equal("11", Assert.IsType<AuthenticatedUser>(context.Items["User"]).Id);
     }
 
     [Fact]

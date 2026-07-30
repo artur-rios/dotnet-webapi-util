@@ -12,7 +12,7 @@ public static class AuthenticationExtensions
     public static Dictionary<string, string> ToTokenClaims(this AuthenticatedUser authenticatedUser) =>
         new()
         {
-            { TokenClaimKeys.Id, authenticatedUser.Id.ToString() },
+            { TokenClaimKeys.Id, authenticatedUser.Id },
             { TokenClaimKeys.Role, authenticatedUser.Role.ToString() }
         };
 }

@@ -9,7 +9,7 @@ public interface IAuthenticationProvider
     /// <summary>Looks up the authenticated user with the given id.</summary>
     /// <param name="id">The user id, typically extracted from the JWT.</param>
     /// <returns>The matching <see cref="AuthenticatedUser"/>, or <c>null</c> if none was found.</returns>
-    AuthenticatedUser? GetAuthenticatedUserById(int id);
+    AuthenticatedUser? GetAuthenticatedUserById(string id);
 
     /// <summary>Looks up the authenticated user with the given email, used when resolving an external (e.g. Google) identity.</summary>
     /// <param name="email">The verified email from the external token.</param>

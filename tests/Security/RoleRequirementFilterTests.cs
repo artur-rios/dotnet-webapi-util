@@ -61,7 +61,7 @@ public class RoleRequirementFilterTests
     [Fact]
     public void OnAuthorization_NoAllowAnonymousAndAuthorizedRole_DoesNotSetResult()
     {
-        var user = new AuthenticatedUser(1, AuthorizedRole);
+        var user = new AuthenticatedUser("1", AuthorizedRole);
         var context = BuildContext(user, allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
 
@@ -73,7 +73,7 @@ public class RoleRequirementFilterTests
     [Fact]
     public void OnAuthorization_NoAllowAnonymousAndUnauthorizedRole_ReturnsForbidden()
     {
-        var user = new AuthenticatedUser(1, UnauthorizedRole);
+        var user = new AuthenticatedUser("1", UnauthorizedRole);
         var context = BuildContext(user, allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
 

@@ -128,7 +128,7 @@ it as a plain `IAuthenticationProvider` and don't need to know caching is happen
 
 ## Identity types
 
-- **`AuthenticatedUser(int Id, int Role)`** — the record attached to `HttpContext.Items["User"]` after
+- **`AuthenticatedUser(string Id, int Role)`** — the record attached to `HttpContext.Items["User"]` after
   successful authentication, and returned by both `IAuthenticationProvider.GetAuthenticatedUserById` and
   `IAuthenticationProvider.GetAuthenticatedUserByEmail`.
 - **`TokenClaimKeys`** — the claim key constants used on both ends of the token: `Id = "id"`,
@@ -138,8 +138,12 @@ it as a plain `IAuthenticationProvider` and don't need to know caching is happen
   when you build the token at login time.
 - **`AuthenticatedUserFactory.FromToken(string token)`** — reads a token's `id`/`role` claims (without
   validating its signature — callers must have already done that) and returns the reconstructed
-  `AuthenticatedUser`, or `null` if the token can't be read or is missing a numeric `id` or `role` claim.
-  This is what `JwtTokenValidator` calls in `ClaimsOnly` mode.
+  `AuthenticatedUser`, or `null` if the token can't be read, has a blank `id` claim, or is missing a
+  numeric `role` claim. This is what `JwtTokenValidator` calls in `ClaimsOnly` mode.
+- **`AuthenticatedUserFactory.IdFromToken(string token)`** — reads just the `id` claim, returning it
+  verbatim (any string — a numeric id, a GUID, an external subject) or `null` if the token can't be read
+  or the claim is blank. This is what `JwtTokenValidator` calls in `Revalidate` mode before the provider
+  lookup.
 
 ```mermaid
 flowchart LR

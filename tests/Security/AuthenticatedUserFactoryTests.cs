@@ -20,13 +20,34 @@ public class AuthenticatedUserFactoryTests
     [Fact]
     public void FromToken_ShouldReconstructUser_FromIdAndRoleClaims()
     {
-        var token = CreateToken(new AuthenticatedUser(42, 3));
+        var token = CreateToken(new AuthenticatedUser("42", 3));
 
         var user = AuthenticatedUserFactory.FromToken(token);
 
         Assert.NotNull(user);
-        Assert.Equal(42, user.Id);
+        Assert.Equal("42", user.Id);
         Assert.Equal(3, user.Role);
+    }
+
+    [Fact]
+    public void FromToken_ShouldReconstructUser_WhenIdIsNotNumeric()
+    {
+        var token = CreateToken(new AuthenticatedUser("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90", 3));
+
+        var user = AuthenticatedUserFactory.FromToken(token);
+
+        Assert.NotNull(user);
+        Assert.Equal("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90", user.Id);
+    }
+
+    [Fact]
+    public void FromToken_ShouldReturnNull_WhenIdClaimIsBlank()
+    {
+        var token = CreateToken(new AuthenticatedUser(" ", 3));
+
+        var user = AuthenticatedUserFactory.FromToken(token);
+
+        Assert.Null(user);
     }
 
     [Fact]
@@ -43,5 +64,19 @@ public class AuthenticatedUserFactoryTests
         var user = AuthenticatedUserFactory.FromToken(string.Empty);
 
         Assert.Null(user);
+    }
+
+    [Fact]
+    public void IdFromToken_ShouldReturnIdClaim_AsWritten()
+    {
+        var token = CreateToken(new AuthenticatedUser("user-42", 3));
+
+        Assert.Equal("user-42", AuthenticatedUserFactory.IdFromToken(token));
+    }
+
+    [Fact]
+    public void IdFromToken_ShouldReturnNull_WhenTokenIsNotReadable()
+    {
+        Assert.Null(AuthenticatedUserFactory.IdFromToken("not-a-jwt"));
     }
 }

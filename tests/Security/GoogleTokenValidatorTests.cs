@@ -16,7 +16,7 @@ public class GoogleTokenValidatorTests
 
     private sealed class StubProvider(AuthenticatedUser? byEmail) : IAuthenticationProvider
     {
-        public AuthenticatedUser? GetAuthenticatedUserById(int id) => null;
+        public AuthenticatedUser? GetAuthenticatedUserById(string id) => null;
         public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => byEmail;
     }
 
@@ -30,13 +30,13 @@ public class GoogleTokenValidatorTests
     public async Task ValidToken_ResolvesUserByEmail()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("user@example.com", "google-sub-1", true));
-        var provider = new StubProvider(new AuthenticatedUser(7, 2));
+        var provider = new StubProvider(new AuthenticatedUser("7", 2));
         var validator = new GoogleTokenValidator(verifier, Options());
 
         var result = await validator.ValidateAsync("google.id.token", ContextWithProvider(provider));
 
         Assert.NotNull(result.User);
-        Assert.Equal(7, result.User!.Id);
+        Assert.Equal("7", result.User!.Id);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class GoogleTokenValidatorTests
     public async Task ValidToken_UnverifiedEmail_RejectsBeforeUserLookup()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("user@example.com", "google-sub-3", false));
-        var provider = new StubProvider(new AuthenticatedUser(7, 2)); // would resolve a user if lookup were reached
+        var provider = new StubProvider(new AuthenticatedUser("7", 2)); // would resolve a user if lookup were reached
         var validator = new GoogleTokenValidator(verifier, Options());
 
         var result = await validator.ValidateAsync("google.id.token", ContextWithProvider(provider));

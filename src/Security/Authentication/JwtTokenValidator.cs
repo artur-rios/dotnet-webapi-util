@@ -11,7 +11,7 @@ namespace ArturRios.Util.WebApi.Security.Authentication;
 
 /// <summary>Validates the app's own HMAC-signed JWT and resolves the user by claims or by an <see cref="IAuthenticationProvider"/> lookup, per <see cref="AuthenticationOptions.JwtMode"/>.</summary>
 /// <param name="jwtConfig">Provides the signing secret used to validate the token.</param>
-/// <param name="jwtHandler">Validates signatures and reads the user id claim.</param>
+/// <param name="jwtHandler">Validates token signatures.</param>
 /// <param name="options">Controls how the user is resolved once the signature is valid.</param>
 public class JwtTokenValidator(JwtConfiguration jwtConfig, JwtHandler jwtHandler, AuthenticationOptions options) : ITokenValidator
 {
@@ -32,15 +32,15 @@ public class JwtTokenValidator(JwtConfiguration jwtConfig, JwtHandler jwtHandler
             return new TokenValidationResult(claimsUser, claimsUser is null ? "Could not retrieve user from token" : null);
         }
 
-        var userId = jwtHandler.GetUserIdFromToken(token);
+        var userId = AuthenticatedUserFactory.IdFromToken(token);
 
-        if (!userId.HasValue)
+        if (userId is null)
         {
             return new TokenValidationResult(null, "Could not retrieve user id from token");
         }
 
         var provider = context.RequestServices.GetRequiredService<IAuthenticationProvider>();
-        var user = provider.GetAuthenticatedUserById(userId.Value);
+        var user = provider.GetAuthenticatedUserById(userId);
 
         return new TokenValidationResult(user, user is null ? "User not found" : null);
     }
