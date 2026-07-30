@@ -34,7 +34,4 @@ public class DefaultAuthenticatedUserMapper : IAuthenticatedUserMapper
 
         return new AuthenticatedUser(id, roleId);
     }
-
-    /// <inheritdoc />
-    public Guid? IdFromClaims(IReadOnlyDictionary<string, string> claims) => FromClaims(claims)?.Id;
 }

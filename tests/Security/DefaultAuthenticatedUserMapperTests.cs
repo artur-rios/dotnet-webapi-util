@@ -9,7 +9,7 @@ public class DefaultAuthenticatedUserMapperTests
 {
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
 
-    private static readonly DefaultAuthenticatedUserMapper Mapper = new();
+    private static readonly IAuthenticatedUserMapper Mapper = new DefaultAuthenticatedUserMapper();
 
     [Fact]
     public void ToClaims_WritesIdAndRoleId()
