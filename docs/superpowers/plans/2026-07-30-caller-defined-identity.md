@@ -52,10 +52,10 @@ If the human running this plan would rather drop that detour entirely, they can 
 | `src/Security/Extensions/AuthenticationServiceCollectionExtensions.cs` | `AddTokenAuthentication<TMapper>` | 5 |
 | `src/Security/Factories/AuthenticatedUserFactory.cs` | **Deleted** (folder becomes empty and is removed) | 5 |
 | `src/Security/Extensions/AuthenticationExtensions.cs` | **Deleted** — replaced by `ToClaims` | 5 |
-| `src/ArturRios.Util.WebApi.csproj` | Version → `3.0.0` | 7 |
-| `docs/content/security.md`, `docs/content/architecture.md`, `README.md` | Documentation | 7 |
+| `src/ArturRios.Util.WebApi.csproj` | Version → `3.0.0` | 6 |
+| `docs/content/security.md`, `docs/content/architecture.md`, `README.md` | Documentation | 6 |
 
-Test files mirror this: `tests/Security/HttpContextExtensionsTests.cs` (Task 1), `TokenClaimsReaderTests.cs` (Task 3), `DefaultAuthenticatedUserMapperTests.cs` (Task 4), `AuthorizeAttributeTests.cs` (Task 6), and updates to the six existing `tests/Security` files across Tasks 2, 5, and 6.
+Test files mirror this: `tests/Security/HttpContextExtensionsTests.cs` (Task 1), `AuthorizeAttributeTests.cs` (Task 2), `TokenClaimsReaderTests.cs` (Task 3), `DefaultAuthenticatedUserMapperTests.cs` (Task 4), and updates to the seven existing `tests/Security` files across Tasks 2 and 5.
 
 ---
 
@@ -268,19 +268,108 @@ This is the atomic type migration. C# will not compile between the first and las
 - Modify: `src/Security/Filters/RoleRequirementFilter.cs`
 - Modify: `src/Security/Attributes/AuthorizeAttribute.cs`
 - Modify: `src/Security/Middleware/AuthenticationMiddleware.cs`
-- Test: modify `tests/Security/JwtTokenValidatorTests.cs`, `AuthenticationMiddlewareTests.cs`, `CachedAuthenticationProviderTests.cs`, `AuthenticationServiceCollectionExtensionsTests.cs`, `GoogleTokenValidatorTests.cs`, `RoleRequirementFilterTests.cs`; delete `tests/Security/AuthenticatedUserFactoryTests.cs`
+- Test: modify `tests/Security/JwtTokenValidatorTests.cs`, `AuthenticationMiddlewareTests.cs`, `CachedAuthenticationProviderTests.cs`, `AuthenticationServiceCollectionExtensionsTests.cs`, `GoogleTokenValidatorTests.cs`, `RoleRequirementFilterTests.cs`, `AuthenticatedUserFactoryTests.cs`
+- Test: create `tests/Security/AuthorizeAttributeTests.cs`
 
 **Interfaces:**
 - Consumes: `IAuthenticatedUser`, `AuthenticationItemKeys` (Task 1).
 - Produces: `record AuthenticatedUser(Guid Id, int RoleId) : IAuthenticatedUser`; `TokenClaimKeys.Id`/`TokenClaimKeys.RoleId`; `IAuthenticationProvider.GetAuthenticatedUserById(Guid id)` → `IAuthenticatedUser?` and `GetAuthenticatedUserByEmail(string email)` → `IAuthenticatedUser?`; `TokenValidationResult(IAuthenticatedUser? User, string? Error)`; `AuthenticatedUserFactory.FromToken(string)` → `AuthenticatedUser?` and `IdFromToken(string)` → `Guid?` (both temporary, deleted in Task 5).
 
-- [ ] **Step 1: Delete the factory's test file**
+- [ ] **Step 1: Migrate the factory's tests to Guid**
 
-```bash
-git rm tests/Security/AuthenticatedUserFactoryTests.cs
+`AuthenticatedUserFactory` still serves the validator until Task 5, so it keeps its coverage until then. Replace `tests/Security/AuthenticatedUserFactoryTests.cs` entirely — the `"not numeric"` cases become `"not a Guid"` cases, and a second `CreateToken` overload lets a test build claims the mapper-shaped helper cannot:
+
+```csharp
+using ArturRios.Jwt;
+using ArturRios.Util.WebApi.Security.Constants;
+using ArturRios.Util.WebApi.Security.Extensions;
+using ArturRios.Util.WebApi.Security.Factories;
+using ArturRios.Util.WebApi.Security.Records;
+
+namespace ArturRios.Util.WebApi.Tests.Security;
+
+public class AuthenticatedUserFactoryTests
+{
+    private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
+
+    private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
+
+    private static string CreateToken(AuthenticatedUser user) => CreateToken(user.ToTokenClaims());
+
+    private static string CreateToken(Dictionary<string, string> claims) =>
+        new JwtHandler().CreateToken(new JwtConfiguration(3600, "issuer", "audience", Secret, claims));
+
+    [Fact]
+    public void FromToken_ShouldReconstructUser_FromIdAndRoleClaims()
+    {
+        var token = CreateToken(new AuthenticatedUser(UserId, 3));
+
+        var user = AuthenticatedUserFactory.FromToken(token);
+
+        Assert.NotNull(user);
+        Assert.Equal(UserId, user.Id);
+        Assert.Equal(3, user.RoleId);
+    }
+
+    [Fact]
+    public void FromToken_ShouldReturnNull_WhenIdIsNotAGuid()
+    {
+        var token = CreateToken(new Dictionary<string, string>
+        {
+            { TokenClaimKeys.Id, "42" }, { TokenClaimKeys.RoleId, "3" }
+        });
+
+        Assert.Null(AuthenticatedUserFactory.FromToken(token));
+    }
+
+    [Fact]
+    public void FromToken_ShouldReturnNull_WhenRoleIdIsNotNumeric()
+    {
+        var token = CreateToken(new Dictionary<string, string>
+        {
+            { TokenClaimKeys.Id, UserId.ToString() }, { TokenClaimKeys.RoleId, "admin" }
+        });
+
+        Assert.Null(AuthenticatedUserFactory.FromToken(token));
+    }
+
+    [Fact]
+    public void FromToken_ShouldReturnNull_WhenTokenIsNotReadable()
+    {
+        Assert.Null(AuthenticatedUserFactory.FromToken("not-a-jwt"));
+    }
+
+    [Fact]
+    public void FromToken_ShouldReturnNull_WhenTokenIsEmpty()
+    {
+        Assert.Null(AuthenticatedUserFactory.FromToken(string.Empty));
+    }
+
+    [Fact]
+    public void IdFromToken_ShouldReturnId_WhenClaimIsAGuid()
+    {
+        var token = CreateToken(new AuthenticatedUser(UserId, 3));
+
+        Assert.Equal(UserId, AuthenticatedUserFactory.IdFromToken(token));
+    }
+
+    [Fact]
+    public void IdFromToken_ShouldReturnNull_WhenIdIsNotAGuid()
+    {
+        var token = CreateToken(new Dictionary<string, string> { { TokenClaimKeys.Id, "42" } });
+
+        Assert.Null(AuthenticatedUserFactory.IdFromToken(token));
+    }
+
+    [Fact]
+    public void IdFromToken_ShouldReturnNull_WhenTokenIsNotReadable()
+    {
+        Assert.Null(AuthenticatedUserFactory.IdFromToken("not-a-jwt"));
+    }
+}
 ```
 
-Deliberate: `AuthenticatedUserFactory` is deleted in Task 5, and every one of its eight tests would need rewriting twice (`string` → `Guid` here, then `Guid` → mapper there). Its parsing rules are covered end-to-end by `JwtTokenValidatorTests` in the meantime, and permanently by `DefaultAuthenticatedUserMapperTests` in Task 4.
+This file is deleted in Task 5 along with the factory itself; `DefaultAuthenticatedUserMapperTests` (Task 4) carries the same parsing rules forward permanently.
 
 - [ ] **Step 2: Update the tests to the new types (the failing state)**
 
@@ -301,6 +390,116 @@ then replace both user constructions:
 ```csharp
         var user = new AuthenticatedUser(UserId, UnauthorizedRole);
 ```
+
+Then widen the helper to the interface and add a caller-defined type — the filter must work against a type the library has never seen. Add `using ArturRios.Util.WebApi.Security.Interfaces;`, the record, and the widened signature (`BuildContext`'s body is unchanged):
+
+```csharp
+    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+    private static AuthorizationFilterContext BuildContext(IAuthenticatedUser? user, bool allowAnonymous)
+```
+
+and append two tests:
+
+```csharp
+    [Fact]
+    public void OnAuthorization_CustomUserTypeWithAuthorizedRole_DoesNotSetResult()
+    {
+        var context = BuildContext(new TenantUser(UserId, AuthorizedRole, "acme"), allowAnonymous: false);
+        var filter = new RoleRequirementFilter(AuthorizedRole);
+
+        filter.OnAuthorization(context);
+
+        Assert.Null(context.Result);
+    }
+
+    [Fact]
+    public void OnAuthorization_CustomUserTypeWithUnauthorizedRole_ReturnsForbidden()
+    {
+        var context = BuildContext(new TenantUser(UserId, UnauthorizedRole, "acme"), allowAnonymous: false);
+        var filter = new RoleRequirementFilter(AuthorizedRole);
+
+        filter.OnAuthorization(context);
+
+        var result = Assert.IsType<ObjectResult>(context.Result);
+        Assert.Equal(403, result.StatusCode);
+    }
+```
+
+Create `tests/Security/AuthorizeAttributeTests.cs` — the attribute has no test file today, and it is the other place a consumer's type meets a cast:
+
+```csharp
+using ArturRios.Util.WebApi.Security.Attributes;
+using ArturRios.Util.WebApi.Security.Interfaces;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
+
+namespace ArturRios.Util.WebApi.Tests.Security;
+
+public class AuthorizeAttributeTests
+{
+    private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
+
+    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+    private static AuthorizationFilterContext BuildContext(IAuthenticatedUser? user, bool allowAnonymous)
+    {
+        var httpContext = new DefaultHttpContext();
+
+        if (user is not null)
+        {
+            httpContext.Items["User"] = user;
+        }
+
+        var actionDescriptor = new ActionDescriptor();
+
+        if (allowAnonymous)
+        {
+            actionDescriptor.EndpointMetadata = new List<object> { new AllowAnonymousAttribute() };
+        }
+
+        var actionContext = new ActionContext(httpContext, new RouteData(), actionDescriptor);
+
+        return new AuthorizationFilterContext(actionContext, new List<IFilterMetadata>());
+    }
+
+    [Fact]
+    public void OnAuthorization_CustomUserType_DoesNotSetResult()
+    {
+        var context = BuildContext(new TenantUser(UserId, 1, "acme"), allowAnonymous: false);
+
+        new AuthorizeAttribute().OnAuthorization(context);
+
+        Assert.Null(context.Result);
+    }
+
+    [Fact]
+    public void OnAuthorization_NoUser_ReturnsUnauthorized()
+    {
+        var context = BuildContext(null, allowAnonymous: false);
+
+        new AuthorizeAttribute().OnAuthorization(context);
+
+        var result = Assert.IsType<JsonResult>(context.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public void OnAuthorization_AllowAnonymousAndNoUser_DoesNotSetResult()
+    {
+        var context = BuildContext(null, allowAnonymous: true);
+
+        new AuthorizeAttribute().OnAuthorization(context);
+
+        Assert.Null(context.Result);
+    }
+}
+```
+
+Both of these genuinely fail before Step 11: today `AuthorizeAttribute` hard-casts `Items["User"]` to the concrete `AuthenticatedUser` and `RoleRequirementFilter` casts with `as AuthenticatedUser`, so a `TenantUser` is not seen as a user at all — `OnAuthorization_CustomUserType_DoesNotSetResult` and `OnAuthorization_CustomUserTypeWithAuthorizedRole_DoesNotSetResult` fail until the casts move to the interface.
 
 `tests/Security/GoogleTokenValidatorTests.cs` — add the id constant at the top of the class:
 
@@ -449,7 +648,9 @@ and in `Revalidate_ReturnsError_WhenTokenHasNoIdClaim`, the stub construction be
 - [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `dotnet test tests/ArturRios.Util.WebApi.Tests.csproj`
-Expected: build failure. Representative errors: `CS1503: cannot convert from 'System.Guid' to 'string'` at the `AuthenticatedUser` constructions, and `CS0535: 'StubProvider' does not implement interface member 'IAuthenticationProvider.GetAuthenticatedUserById(string)'`.
+Expected: build failure. Representative errors: `CS1503: cannot convert from 'System.Guid' to 'string'` at the `AuthenticatedUser` constructions, `CS0535: 'StubProvider' does not implement interface member 'IAuthenticationProvider.GetAuthenticatedUserById(string)'`, and `CS0246`/`CS1503` around `IAuthenticatedUser` in the two filter test files.
+
+Once the build succeeds (after Step 11), the two custom-user-type tests are the ones that must have been failing for behavioral reasons rather than compilation — that is the point of writing them now.
 
 - [ ] **Step 4: Flip the record**
 
@@ -690,7 +891,7 @@ Note: `GoogleTokenValidator` needs **no** edit. It writes `var user = provider.G
 - [ ] **Step 12: Run the tests to verify they pass**
 
 Run: `dotnet test tests/ArturRios.Util.WebApi.Tests.csproj`
-Expected: PASS. The count drops by 8 from the `AuthenticatedUserFactoryTests` deletion and rises by 5 from Task 1.
+Expected: PASS, with 5 more tests than before this task (3 in `AuthorizeAttributeTests`, 2 in `RoleRequirementFilterTests`), plus the 5 added by Task 1.
 
 - [ ] **Step 13: Verify a warning-free build**
 
@@ -1061,7 +1262,7 @@ The payoff task: after it, no library code outside `DefaultAuthenticatedUserMapp
 - Modify: `src/Security/Extensions/AuthenticationServiceCollectionExtensions.cs`
 - Delete: `src/Security/Factories/AuthenticatedUserFactory.cs` (and the now-empty `src/Security/Factories/` folder)
 - Delete: `src/Security/Extensions/AuthenticationExtensions.cs`
-- Test: rewrite `tests/Security/JwtTokenValidatorTests.cs`; modify `tests/Security/AuthenticationMiddlewareTests.cs` and `tests/Security/AuthenticationServiceCollectionExtensionsTests.cs`
+- Test: rewrite `tests/Security/JwtTokenValidatorTests.cs`; modify `tests/Security/AuthenticationMiddlewareTests.cs` and `tests/Security/AuthenticationServiceCollectionExtensionsTests.cs`; delete `tests/Security/AuthenticatedUserFactoryTests.cs`
 
 **Interfaces:**
 - Consumes: `TokenClaimsReader.Read` (Task 3), `IAuthenticatedUserMapper`, `DefaultAuthenticatedUserMapper` (Task 4), `IAuthenticationProvider`, `TokenValidationResult` (Task 2).
@@ -1526,10 +1727,10 @@ In `src/Security/Extensions/AuthenticationServiceCollectionExtensions.cs`, add `
 - [ ] **Step 6: Delete the superseded claim paths**
 
 ```bash
-git rm src/Security/Factories/AuthenticatedUserFactory.cs src/Security/Extensions/AuthenticationExtensions.cs
+git rm src/Security/Factories/AuthenticatedUserFactory.cs src/Security/Extensions/AuthenticationExtensions.cs tests/Security/AuthenticatedUserFactoryTests.cs
 ```
 
-`src/Security/Factories/` is now empty; `git rm` leaves no tracked files there, so nothing else is needed.
+`src/Security/Factories/` is now empty; `git rm` leaves no tracked files there, so nothing else is needed. The factory's test file goes with it — `DefaultAuthenticatedUserMapperTests` (Task 4) already covers the same parsing rules against the type that replaces it.
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
@@ -1554,150 +1755,7 @@ claims at login. AuthenticatedUserFactory and ToTokenClaims are gone."
 
 ---
 
-### Task 6: Authorization filters against a caller-defined user type
-
-The attributes are the part most likely to break silently for a consumer: they read `Items["User"]` by
-cast, so a wrong cast fails closed (401/403) rather than erroring. `AuthorizeAttribute` has no test file
-at all today. This task locks both filters to the interface, driven by a type the library has never seen.
-
-These tests exercise behavior that Task 2 already implemented, so they should pass on the first run. If
-one fails, the interface wiring from Task 2 is wrong — **fix the source, not the test.**
-
-**Files:**
-- Create: `tests/Security/AuthorizeAttributeTests.cs`
-- Modify: `tests/Security/RoleRequirementFilterTests.cs`
-
-**Interfaces:**
-- Consumes: `IAuthenticatedUser` (Task 1), `AuthorizeAttribute`, `RoleRequirementFilter`, `AllowAnonymousAttribute` (Task 2).
-- Produces: nothing consumed by code.
-
-- [ ] **Step 1: Write the AuthorizeAttribute tests**
-
-Create `tests/Security/AuthorizeAttributeTests.cs`:
-
-```csharp
-using ArturRios.Util.WebApi.Security.Attributes;
-using ArturRios.Util.WebApi.Security.Interfaces;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Routing;
-
-namespace ArturRios.Util.WebApi.Tests.Security;
-
-public class AuthorizeAttributeTests
-{
-    private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
-
-    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
-
-    private static AuthorizationFilterContext BuildContext(IAuthenticatedUser? user, bool allowAnonymous)
-    {
-        var httpContext = new DefaultHttpContext();
-
-        if (user is not null)
-        {
-            httpContext.Items["User"] = user;
-        }
-
-        var actionDescriptor = new ActionDescriptor();
-
-        if (allowAnonymous)
-        {
-            actionDescriptor.EndpointMetadata = new List<object> { new AllowAnonymousAttribute() };
-        }
-
-        var actionContext = new ActionContext(httpContext, new RouteData(), actionDescriptor);
-
-        return new AuthorizationFilterContext(actionContext, new List<IFilterMetadata>());
-    }
-
-    [Fact]
-    public void OnAuthorization_CustomUserType_DoesNotSetResult()
-    {
-        var context = BuildContext(new TenantUser(UserId, 1, "acme"), allowAnonymous: false);
-
-        new AuthorizeAttribute().OnAuthorization(context);
-
-        Assert.Null(context.Result);
-    }
-
-    [Fact]
-    public void OnAuthorization_NoUser_ReturnsUnauthorized()
-    {
-        var context = BuildContext(null, allowAnonymous: false);
-
-        new AuthorizeAttribute().OnAuthorization(context);
-
-        var result = Assert.IsType<JsonResult>(context.Result);
-        Assert.Equal(StatusCodes.Status401Unauthorized, result.StatusCode);
-    }
-
-    [Fact]
-    public void OnAuthorization_AllowAnonymousAndNoUser_DoesNotSetResult()
-    {
-        var context = BuildContext(null, allowAnonymous: true);
-
-        new AuthorizeAttribute().OnAuthorization(context);
-
-        Assert.Null(context.Result);
-    }
-}
-```
-
-- [ ] **Step 2: Widen the role filter's tests to the interface and add custom-type cases**
-
-In `tests/Security/RoleRequirementFilterTests.cs`, add `using ArturRios.Util.WebApi.Security.Interfaces;`, widen the helper's parameter, and add the custom type:
-
-```csharp
-    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
-
-    private static AuthorizationFilterContext BuildContext(IAuthenticatedUser? user, bool allowAnonymous)
-```
-
-The body of `BuildContext` is unchanged. Then append two tests:
-
-```csharp
-    [Fact]
-    public void OnAuthorization_CustomUserTypeWithAuthorizedRole_DoesNotSetResult()
-    {
-        var context = BuildContext(new TenantUser(UserId, AuthorizedRole, "acme"), allowAnonymous: false);
-        var filter = new RoleRequirementFilter(AuthorizedRole);
-
-        filter.OnAuthorization(context);
-
-        Assert.Null(context.Result);
-    }
-
-    [Fact]
-    public void OnAuthorization_CustomUserTypeWithUnauthorizedRole_ReturnsForbidden()
-    {
-        var context = BuildContext(new TenantUser(UserId, UnauthorizedRole, "acme"), allowAnonymous: false);
-        var filter = new RoleRequirementFilter(AuthorizedRole);
-
-        filter.OnAuthorization(context);
-
-        var result = Assert.IsType<ObjectResult>(context.Result);
-        Assert.Equal(403, result.StatusCode);
-    }
-```
-
-- [ ] **Step 3: Run the tests**
-
-Run: `dotnet test tests/ArturRios.Util.WebApi.Tests.csproj --filter "AuthorizeAttributeTests|RoleRequirementFilterTests"`
-Expected: PASS, 9 tests (3 new + 4 existing + 2 new). A failure means Task 2's cast or `RoleId` read is wrong.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add tests/Security/AuthorizeAttributeTests.cs tests/Security/RoleRequirementFilterTests.cs
-git commit -m "test: cover authorization filters with a custom user type"
-```
-
----
-
-### Task 7: Documentation and version bump
+### Task 6: Documentation and version bump
 
 **Files:**
 - Modify: `src/ArturRios.Util.WebApi.csproj:10`
@@ -1847,7 +1905,7 @@ git commit -m "docs: document caller-defined identity and bump to 3.0.0"
 
 ## Verification summary
 
-After Task 7, all of the following must hold:
+After Task 6, all of the following must hold:
 
 - `dotnet build src/ArturRios.Util.WebApi.csproj` → 0 errors, 0 warnings.
 - `dotnet test tests/ArturRios.Util.WebApi.Tests.csproj` → all green.
