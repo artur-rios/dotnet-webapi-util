@@ -1549,7 +1549,7 @@ and the two tests:
         var services = new ServiceCollection();
         services.AddTokenAuthentication(_ => { });
 
-        var descriptor = Assert.Single(services.Where(d => d.ServiceType == typeof(IAuthenticatedUserMapper)));
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IAuthenticatedUserMapper));
         Assert.Equal(typeof(DefaultAuthenticatedUserMapper), descriptor.ImplementationType);
     }
 
@@ -1559,7 +1559,7 @@ and the two tests:
         var services = new ServiceCollection();
         services.AddTokenAuthentication<StubMapper>(_ => { });
 
-        var descriptor = Assert.Single(services.Where(d => d.ServiceType == typeof(IAuthenticatedUserMapper)));
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IAuthenticatedUserMapper));
         Assert.Equal(typeof(StubMapper), descriptor.ImplementationType);
     }
 ```
