@@ -7,6 +7,7 @@ using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
+using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Middleware;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
@@ -19,15 +20,48 @@ public class AuthenticationMiddlewareTests
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
 
-    private sealed class StubProvider(AuthenticatedUser? byId = null, AuthenticatedUser? byEmail = null) : IAuthenticationProvider
+    private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
+    private static readonly Guid OtherId = Guid.Parse("7b644d0a-9f11-4c5d-8e6a-4b903f2a9c1e");
+    private static readonly DefaultAuthenticatedUserMapper Mapper = new();
+
+    private sealed class StubProvider(IAuthenticatedUser? byId = null, IAuthenticatedUser? byEmail = null) : IAuthenticationProvider
     {
-        public AuthenticatedUser? GetAuthenticatedUserById(int id) => byId;
-        public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => byEmail;
+        public IAuthenticatedUser? GetAuthenticatedUserById(Guid id) => byId;
+        public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) => byEmail;
     }
 
     private sealed class FakeVerifier(GoogleTokenPayload? payload) : IGoogleTokenVerifier
     {
         public Task<GoogleTokenPayload?> VerifyAsync(string token, IEnumerable<string> audiences) => Task.FromResult(payload);
+    }
+
+    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+    private sealed class TenantMapper : IAuthenticatedUserMapper
+    {
+        private const string IdClaim = "uid";
+        private const string RoleClaim = "r";
+        private const string TenantClaim = "tenant";
+
+        public Dictionary<string, string> ToClaims(IAuthenticatedUser user) =>
+            new()
+            {
+                { IdClaim, user.Id.ToString() },
+                { RoleClaim, user.RoleId.ToString() },
+                { TenantClaim, ((TenantUser)user).TenantId }
+            };
+
+        public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
+        {
+            if (!claims.TryGetValue(IdClaim, out var idClaim) || !Guid.TryParse(idClaim, out var id) ||
+                !claims.TryGetValue(RoleClaim, out var roleClaim) || !int.TryParse(roleClaim, out var roleId) ||
+                !claims.TryGetValue(TenantClaim, out var tenantId))
+            {
+                return null;
+            }
+
+            return new TenantUser(id, roleId, tenantId);
+        }
     }
 
     private static SettingsProvider EmptySettings() => new(new ConfigurationBuilder().Build());
@@ -42,7 +76,7 @@ public class AuthenticationMiddlewareTests
         new(next, EmptySettings(), options, validators);
 
     private static ITokenValidator Jwt(AuthenticationOptions options) =>
-        new JwtTokenValidator(Config(), new JwtHandler(), options);
+        new JwtTokenValidator(Config(), new JwtHandler(), Mapper, options);
 
     private static (DefaultHttpContext Context, StringBuilder Log) BuildContext(
         string? headerToken, IAuthenticationProvider? provider, string? cookieName = null, string? cookieValue = null)
@@ -78,15 +112,31 @@ public class AuthenticationMiddlewareTests
     public async Task Jwt_ClaimsOnly_SetsUserAndCallsNext()
     {
         var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
-        var token = CreateToken(new AuthenticatedUser(42, 3).ToTokenClaims());
+        var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
         var (context, log) = BuildContext(token, provider: null);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
 
         await middleware.InvokeAsync(context);
 
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
-        Assert.Equal(42, user.Id);
+        Assert.Equal(UserId, user.Id);
         Assert.Equal("next", log.ToString());
+    }
+
+    [Fact]
+    public async Task Jwt_CustomMapper_AttachesCallerTypeReadableByGetUser()
+    {
+        var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
+        var mapper = new TenantMapper();
+        var token = CreateToken(mapper.ToClaims(new TenantUser(UserId, 3, "acme")));
+        var (context, log) = BuildContext(token, provider: null);
+        var validator = new JwtTokenValidator(Config(), new JwtHandler(), mapper, options);
+        var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [validator]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+        Assert.Equal("acme", context.GetUser<TenantUser>()!.TenantId);
     }
 
     [Fact]
@@ -107,7 +157,7 @@ public class AuthenticationMiddlewareTests
     public async Task CookieSource_ReadsTokenFromCookie()
     {
         var options = new AuthenticationOptions { Source = TokenSource.Cookie, CookieName = "access_token" };
-        var token = CreateToken(new AuthenticatedUser(1, 1).ToTokenClaims());
+        var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(UserId, 1)));
         var (context, log) = BuildContext(headerToken: null, provider: null, cookieName: "access_token", cookieValue: token);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
 
@@ -121,7 +171,7 @@ public class AuthenticationMiddlewareTests
     public async Task BothEnabled_AcceptsGoogleToken_WhenNotAJwt()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
-        var provider = new StubProvider(byEmail: new AuthenticatedUser(7, 2));
+        var provider = new StubProvider(byEmail: new AuthenticatedUser(OtherId, 2));
         var (context, log) = BuildContext("google.id.token", provider);
         var google = new GoogleTokenValidator(new FakeVerifier(new GoogleTokenPayload("u@e.com", "sub", true)), options);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options), google]);
@@ -130,14 +180,14 @@ public class AuthenticationMiddlewareTests
 
         Assert.Equal("next", log.ToString());
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
-        Assert.Equal(7, user.Id);
+        Assert.Equal(OtherId, user.Id);
     }
 
     [Fact]
     public async Task BothEnabled_AcceptsAppJwt()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
-        var token = CreateToken(new AuthenticatedUser(11, 1).ToTokenClaims());
+        var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(OtherId, 1)));
         var (context, log) = BuildContext(token, provider: null);
         var google = new GoogleTokenValidator(new FakeVerifier(payload: null), options);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options), google]);
@@ -145,7 +195,7 @@ public class AuthenticationMiddlewareTests
         await middleware.InvokeAsync(context);
 
         Assert.Equal("next", log.ToString());
-        Assert.Equal(11, Assert.IsType<AuthenticatedUser>(context.Items["User"]).Id);
+        Assert.Equal(OtherId, Assert.IsType<AuthenticatedUser>(context.Items["User"]).Id);
     }
 
     [Fact]

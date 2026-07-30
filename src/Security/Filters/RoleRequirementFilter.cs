@@ -1,8 +1,9 @@
-﻿using ArturRios.Extensions;
+using ArturRios.Extensions;
 using ArturRios.Output;
 using ArturRios.Util.Http;
 using ArturRios.Util.WebApi.Security.Attributes;
-using ArturRios.Util.WebApi.Security.Records;
+using ArturRios.Util.WebApi.Security.Constants;
+using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -25,13 +26,13 @@ public class RoleRequirementFilter(params int[] authorizedRoles) : IAuthorizatio
             return;
         }
 
-        var user = context.HttpContext.Items["User"] as AuthenticatedUser;
+        var user = context.HttpContext.Items[AuthenticationItemKeys.User] as IAuthenticatedUser;
 
         var authorized = false;
 
         if (user is not null)
         {
-            authorized = user.Role.In(authorizedRoles);
+            authorized = user.RoleId.In(authorizedRoles);
         }
 
         if (authorized)

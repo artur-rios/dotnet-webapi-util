@@ -1,6 +1,7 @@
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Interfaces;
+using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Providers;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,16 +44,33 @@ public static class AuthenticationServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the consolidated <see cref="AuthenticationOptions"/> and the enabled token validators used by
-    /// <c>AuthenticationMiddleware</c>. Validators are registered app-JWT first, Google second, so the middleware
-    /// tries them in that order. The app must separately register <c>JwtConfiguration</c> and <c>JwtHandler</c>
-    /// (for JWT) and an <see cref="IAuthenticationProvider"/> (required for Google and for JWT <c>Revalidate</c> mode).
+    /// Registers the consolidated <see cref="AuthenticationOptions"/>, the enabled token validators, and
+    /// <see cref="DefaultAuthenticatedUserMapper"/> as the claims mapper, unless an
+    /// <see cref="IAuthenticatedUserMapper"/> is already registered. Use
+    /// <see cref="AddTokenAuthentication{TMapper}"/> to supply your own mapper instead.
     /// </summary>
     /// <param name="services">The service collection to register into.</param>
     /// <param name="configure">Configures the options.</param>
     /// <exception cref="ArgumentException">No scheme enabled, or Google enabled without any client IDs.</exception>
     public static IServiceCollection AddTokenAuthentication(
+        this IServiceCollection services, Action<AuthenticationOptions> configure) =>
+        services.AddTokenAuthentication<DefaultAuthenticatedUserMapper>(configure);
+
+    /// <summary>
+    /// Registers the consolidated <see cref="AuthenticationOptions"/>, the enabled token validators, and
+    /// <typeparamref name="TMapper"/> as the claims mapper, unless an <see cref="IAuthenticatedUserMapper"/>
+    /// is already registered. Validators are registered app-JWT first, Google second, so the middleware
+    /// tries them in that order. The app must separately register <c>JwtConfiguration</c> and
+    /// <c>JwtHandler</c> (for JWT) and an <see cref="IAuthenticationProvider"/> (required for Google and
+    /// for JWT <c>Revalidate</c> mode).
+    /// </summary>
+    /// <typeparam name="TMapper">The mapper translating between the app's user and its token claims.</typeparam>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="configure">Configures the options.</param>
+    /// <exception cref="ArgumentException">No scheme enabled, or Google enabled without any client IDs.</exception>
+    public static IServiceCollection AddTokenAuthentication<TMapper>(
         this IServiceCollection services, Action<AuthenticationOptions> configure)
+        where TMapper : class, IAuthenticatedUserMapper
     {
         var options = new AuthenticationOptions();
         configure(options);
@@ -68,6 +86,7 @@ public static class AuthenticationServiceCollectionExtensions
         }
 
         services.AddSingleton(options);
+        services.TryAddSingleton<IAuthenticatedUserMapper, TMapper>();
 
         if (options.EnableJwt)
         {

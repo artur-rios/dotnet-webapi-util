@@ -24,7 +24,7 @@ Requires **.NET 10**.
 | Area | What it does | Docs |
 |---|---|---|
 | Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/configuration/) |
-| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `AuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
+| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/http-client/) |
 | Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/responses/) |
@@ -80,7 +80,7 @@ Startup behavior can be tweaked without code changes via command-line args parse
 
 `AuthenticationMiddleware` extracts a token from the request — the `Authorization: Bearer` header, a
 cookie, or either, per `AuthenticationOptions.Source` — and runs it through the enabled validators
-(the app's own JWT and/or a Google ID token) until one resolves an `AuthenticatedUser`, which is then
+(the app's own JWT and/or a Google ID token) until one resolves an `IAuthenticatedUser`, which is then
 attached to `HttpContext.Items["User"]`. Swagger routes and endpoints marked with `[AllowAnonymous]` are
 skipped.
 
@@ -105,13 +105,16 @@ a user wins.
 
 For the app JWT, how the user is resolved is controlled by `AuthenticationOptions.JwtMode`:
 
-- **`ClaimsOnly` (default)** — the user is rebuilt from the token's `id` and `role` claims. No data
+- **`ClaimsOnly` (default)** — the registered mapper rebuilds the user from the token's claims. No data
   store is queried, so authentication costs nothing beyond the signature check. Because nothing is
   re-checked server-side, role changes and revocations only take effect once the token expires — keep
   access-token lifetimes short and use refresh tokens.
-- **`Revalidate`** — `IAuthenticationProvider.GetAuthenticatedUserById` is called on every request
+- **`Revalidate`** — `IAuthenticationProvider.GetAuthenticatedUserById(Guid)` is called on every request
   (resolved per-request from the request scope). Guarantees freshness and lets deleted users be
   rejected immediately, at the cost of one lookup per request.
+- **Your own identity** — implement `IAuthenticatedUser` (`Guid Id`, `int RoleId`) on your own type and an
+  `IAuthenticatedUserMapper` to decide what your tokens carry; read it back with
+  `HttpContext.GetUser<MyUser>()`. See [Security](https://artur-rios.github.io/dotnet-webapi-util/security/).
 
 A Google ID token is always resolved by looking up the token's verified email through
 `IAuthenticationProvider.GetAuthenticatedUserByEmail`, so an `IAuthenticationProvider` is **required**

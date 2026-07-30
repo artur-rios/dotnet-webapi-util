@@ -9,15 +9,17 @@ namespace ArturRios.Util.WebApi.Tests.Security;
 
 public class GoogleTokenValidatorTests
 {
+    private static readonly Guid UserId = Guid.Parse("7b644d0a-9f11-4c5d-8e6a-4b903f2a9c1e");
+
     private sealed class FakeVerifier(GoogleTokenPayload? payload) : IGoogleTokenVerifier
     {
         public Task<GoogleTokenPayload?> VerifyAsync(string token, IEnumerable<string> audiences) => Task.FromResult(payload);
     }
 
-    private sealed class StubProvider(AuthenticatedUser? byEmail) : IAuthenticationProvider
+    private sealed class StubProvider(IAuthenticatedUser? byEmail) : IAuthenticationProvider
     {
-        public AuthenticatedUser? GetAuthenticatedUserById(int id) => null;
-        public AuthenticatedUser? GetAuthenticatedUserByEmail(string email) => byEmail;
+        public IAuthenticatedUser? GetAuthenticatedUserById(Guid id) => null;
+        public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) => byEmail;
     }
 
     private static HttpContext ContextWithProvider(IAuthenticationProvider provider) =>
@@ -30,13 +32,13 @@ public class GoogleTokenValidatorTests
     public async Task ValidToken_ResolvesUserByEmail()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("user@example.com", "google-sub-1", true));
-        var provider = new StubProvider(new AuthenticatedUser(7, 2));
+        var provider = new StubProvider(new AuthenticatedUser(UserId, 2));
         var validator = new GoogleTokenValidator(verifier, Options());
 
         var result = await validator.ValidateAsync("google.id.token", ContextWithProvider(provider));
 
         Assert.NotNull(result.User);
-        Assert.Equal(7, result.User!.Id);
+        Assert.Equal(UserId, result.User!.Id);
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public class GoogleTokenValidatorTests
     public async Task ValidToken_UnverifiedEmail_RejectsBeforeUserLookup()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("user@example.com", "google-sub-3", false));
-        var provider = new StubProvider(new AuthenticatedUser(7, 2)); // would resolve a user if lookup were reached
+        var provider = new StubProvider(new AuthenticatedUser(UserId, 2)); // would resolve a user if lookup were reached
         var validator = new GoogleTokenValidator(verifier, Options());
 
         var result = await validator.ValidateAsync("google.id.token", ContextWithProvider(provider));

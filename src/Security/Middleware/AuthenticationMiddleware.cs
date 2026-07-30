@@ -5,8 +5,8 @@ using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
+using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
-using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
 
@@ -57,7 +57,7 @@ public class AuthenticationMiddleware(
 
             if (user is not null)
             {
-                context.Items["User"] = user;
+                context.Items[AuthenticationItemKeys.User] = user;
 
                 await next(context);
 

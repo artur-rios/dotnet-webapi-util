@@ -56,7 +56,7 @@ the pipeline). For each request it:
 1. Skips validation entirely for Swagger routes and for endpoints marked `[AllowAnonymous]`.
 2. Extracts the token per `AuthenticationOptions.Source`, as above.
 3. Runs the token through the enabled validators, in registration order (app JWT, then Google). The first
-   validator that resolves an `AuthenticatedUser` wins: it's attached to `HttpContext.Items["User"]` and
+   validator that resolves an `IAuthenticatedUser` wins: it's attached to `HttpContext.Items["User"]` and
    the next middleware runs.
 4. If no validator resolves a user, the request gets a 401 with the last validator's error (e.g.
    `"Invalid token"`, `"Invalid Google token"`, `"User not found"`).
@@ -67,16 +67,15 @@ When `EnableJwt` is `true`, `JwtTokenValidator` first checks the token's signatu
 `JwtHandler.IsTokenValidAsync`; an invalid or missing token fails with `"Invalid token"`. How the user is
 then resolved is controlled by `AuthenticationOptions.JwtMode`:
 
-- **`ClaimsOnly` (default)** — `AuthenticatedUserFactory.FromToken` rebuilds the user from the token's
-  `id` and `role` claims. No data store is queried, so authentication costs nothing beyond the signature
-  check. The trade-off: because nothing is re-checked server-side, role changes and revocations only take
-  effect once the token expires. Keep access-token lifetimes short and pair this mode with refresh
-  tokens.
-- **`Revalidate`** — the user id is read from the token, and `IAuthenticationProvider` is resolved
-  **per-request** from `HttpContext.RequestServices` (so it can be a scoped service) and its
-  `GetAuthenticatedUserById` is called. This guarantees freshness — a deleted or role-changed user is
-  rejected or updated on the very next request — at the cost of one lookup per request. An
-  `IAuthenticationProvider` **must** be registered for this mode.
+- **`ClaimsOnly` (default)** — the registered mapper's `FromClaims` rebuilds the user from the token's
+  claims. No data store is queried, so authentication costs nothing beyond the signature check. The
+  trade-off: because nothing is re-checked server-side, role changes and revocations only take effect
+  once the token expires. Keep access-token lifetimes short and pair this mode with refresh tokens.
+- **`Revalidate`** — the user id is read from the token by the mapper's `IdFromClaims`, and
+  `IAuthenticationProvider` is resolved **per-request** from `HttpContext.RequestServices` (so it can be a
+  scoped service) and its `GetAuthenticatedUserById` is called. This guarantees freshness — a deleted or
+  role-changed user is rejected or updated on the very next request — at the cost of one lookup per
+  request. An `IAuthenticationProvider` **must** be registered for this mode.
 
 ## Google authentication
 
@@ -128,25 +127,77 @@ it as a plain `IAuthenticationProvider` and don't need to know caching is happen
 
 ## Identity types
 
-- **`AuthenticatedUser(int Id, int Role)`** — the record attached to `HttpContext.Items["User"]` after
-  successful authentication, and returned by both `IAuthenticationProvider.GetAuthenticatedUserById` and
-  `IAuthenticationProvider.GetAuthenticatedUserByEmail`.
-- **`TokenClaimKeys`** — the claim key constants used on both ends of the token: `Id = "id"`,
-  `Role = "role"`.
-- **`AuthenticationExtensions.ToTokenClaims(this AuthenticatedUser)`** — converts an `AuthenticatedUser`
-  into a `Dictionary<string, string>` keyed by `TokenClaimKeys`, ready to hand to your JWT-issuing code
-  when you build the token at login time.
-- **`AuthenticatedUserFactory.FromToken(string token)`** — reads a token's `id`/`role` claims (without
-  validating its signature — callers must have already done that) and returns the reconstructed
-  `AuthenticatedUser`, or `null` if the token can't be read or is missing a numeric `id` or `role` claim.
-  This is what `JwtTokenValidator` calls in `ClaimsOnly` mode.
+The library knows exactly two things about a user — an id and a role id — and leaves everything else,
+including the token's claim keys, to the app.
+
+- **`IAuthenticatedUser`** — `Guid Id` and `int RoleId`. Implement it on your own type, adding whatever
+  else your app needs; instances are attached to the current request after successful authentication and
+  returned by both `IAuthenticationProvider` methods.
+- **`AuthenticatedUser(Guid Id, int RoleId)`** — the default implementation, for apps that need nothing
+  extra.
+- **`IAuthenticatedUserMapper`** — translates between your user and your claims, in both directions:
+  `ToClaims(IAuthenticatedUser)` builds the claims you embed at login, `FromClaims(...)` rebuilds the user
+  during `ClaimsOnly` validation, and `IdFromClaims(...)` reads just the id for `Revalidate` mode
+  (a default implementation delegates to `FromClaims`; override it when your token carries more than
+  `FromClaims` needs). Implementations must return `null` for claims they cannot interpret rather than
+  throwing — use `TryParse`, not `Parse`. `AddTokenAuthentication` resolves your mapper as a singleton, so
+  it must stay stateless and free of scoped dependencies (a `DbContext`, a request-scoped tenant accessor).
+- **`DefaultAuthenticatedUserMapper`** — used when you register no mapper of your own. Maps `Id`/`RoleId`
+  through `TokenClaimKeys` and produces an `AuthenticatedUser`.
+- **`TokenClaimKeys`** — the claim keys the default mapper uses: `Id = "id"`, `RoleId = "role"`. A custom
+  mapper may use any keys it likes.
+- **`TokenClaimsReader.Read(string token)`** — reads a token's claims into a dictionary without validating
+  its signature (callers must have already done that), or `null` if the token can't be read. A repeated
+  claim key keeps its first occurrence.
+- **`HttpContext.GetUser<TUser>()`** — the authenticated user as your own type, or `null` if the request
+  isn't authenticated or the attached user is another type. `GetUser()` returns `IAuthenticatedUser?`.
+
+```csharp
+public record MyUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+public class MyUserMapper : IAuthenticatedUserMapper
+{
+    private const string TenantClaim = "tenant";
+
+    public Dictionary<string, string> ToClaims(IAuthenticatedUser user) =>
+        new()
+        {
+            { TokenClaimKeys.Id, user.Id.ToString() },
+            { TokenClaimKeys.RoleId, user.RoleId.ToString() },
+            { TenantClaim, ((MyUser)user).TenantId }
+        };
+
+    public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
+    {
+        if (!claims.TryGetValue(TokenClaimKeys.Id, out var id) || !Guid.TryParse(id, out var userId) ||
+            !claims.TryGetValue(TokenClaimKeys.RoleId, out var role) || !int.TryParse(role, out var roleId))
+        {
+            return null;
+        }
+
+        claims.TryGetValue(TenantClaim, out var tenantId);
+
+        return new MyUser(userId, roleId, tenantId ?? string.Empty);
+    }
+}
+```
+
+Register it with the generic overload; omit the type argument to get `DefaultAuthenticatedUserMapper`:
+
+```csharp
+builder.Services.AddTokenAuthentication<MyUserMapper>(options => { /* ... */ });
+```
 
 ```mermaid
 flowchart LR
-    User["AuthenticatedUser"] -- "ToTokenClaims()" --> Claims["id / role claims"]
+    User["your IAuthenticatedUser"] -- "mapper.ToClaims()" --> Claims["your claims"]
     Claims -- "embedded in JWT at login" --> Token["Bearer token"]
-    Token -- "AuthenticatedUserFactory.FromToken()" --> User2["AuthenticatedUser"]
+    Token -- "TokenClaimsReader.Read()" --> Claims2["claims dictionary"]
+    Claims2 -- "mapper.FromClaims()" --> User2["your IAuthenticatedUser"]
 ```
+
+Because `ToClaims` takes the interface, a mapper writing extra claims casts to its own type. The cast is
+safe: the same app owns the user type, the mapper, and the provider that produced the user.
 
 ## Declaring access rules
 
@@ -169,7 +220,7 @@ public class AccountsController : ControllerBase
   `[AllowAnonymous]` and returns immediately (no 401) if present.
 - **`[RoleRequirement(params int[] authorizedRoles)]`** — a `TypeFilterAttribute` around
   `RoleRequirementFilter`. It reads the same `HttpContext.Items["User"]`; if the user is present and its
-  `Role` is one of `authorizedRoles`, the request proceeds, otherwise it short-circuits with a 403
+  `RoleId` is one of `authorizedRoles`, the request proceeds, otherwise it short-circuits with a 403
   (a `ProcessOutput` with the error `"You do not have permission to access this resource"`). It also
   honors `[AllowAnonymous]` — an anonymous-marked action returns immediately without a role check, even
   under `[RoleRequirement(...)]`.
@@ -223,3 +274,35 @@ revocations bounded.
   and wiring up `ConfigureSecurity()`.
 - **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — how `ExceptionMiddleware` and
   `TraceActivityMiddleware` relate to the rest of the pipeline `AuthenticationMiddleware` runs in.
+
+## Migrating from 2.x
+
+`3.0.0` makes the authenticated-user type and the token's claim keys caller-defined. Where the library
+used to hard-code `AuthenticatedUser(int Id, int Role)`, it now only knows `IAuthenticatedUser` (`Guid
+Id`, `int RoleId`) — implement your own, or keep using the library's `AuthenticatedUser(Guid Id, int
+RoleId)`.
+
+| Before | After |
+|---|---|
+| `AuthenticatedUser(int Id, int Role)` | `AuthenticatedUser(Guid Id, int RoleId)`, or your own `IAuthenticatedUser` |
+| `user.Role` | `user.RoleId` |
+| `TokenClaimKeys.Role` | `TokenClaimKeys.RoleId` — the claim string is still `"role"` |
+| `GetAuthenticatedUserById(int id)` returning `AuthenticatedUser?` | `GetAuthenticatedUserById(Guid id)` returning `IAuthenticatedUser?` |
+| `GetAuthenticatedUserByEmail(string email)` returning `AuthenticatedUser?` | same parameter, now returning `IAuthenticatedUser?` |
+| `TokenValidationResult(AuthenticatedUser?, string?)` | `TokenValidationResult(IAuthenticatedUser?, string?)` — affects custom `ITokenValidator` implementations |
+| `user.ToTokenClaims()` | `mapper.ToClaims(user)` |
+| `AuthenticatedUserFactory.FromToken(token)` | `TokenClaimsReader.Read(token)` then `mapper.FromClaims(claims)` |
+| `(AuthenticatedUser?)HttpContext.Items["User"]` | `HttpContext.GetUser<MyUser>()` |
+
+Two things to plan around before you deploy this upgrade:
+
+**Tokens issued by 2.x are rejected after the upgrade.** The claim key strings are unchanged, so the
+claims still *read* — but `DefaultAuthenticatedUserMapper` requires the `id` claim to parse as a `Guid`,
+and 2.x wrote an integer there. Every unexpired access token therefore fails with a 401
+(`"Could not retrieve user from token"`, or `"Could not retrieve user id from token"` in `Revalidate`
+mode). This is fail-closed and safe, but it logs every user out at the moment of deployment. Plan for
+it: drain the old tokens before switching over, accept the forced re-authentication, or ship a mapper
+that accepts both an integer and a `Guid` in the `id` claim for one release.
+
+**User ids must become `Guid`s.** If your store keys users by integer, this is a data migration, not
+just a compile fix.

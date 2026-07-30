@@ -1,11 +1,12 @@
-﻿using ArturRios.Util.WebApi.Security.Records;
+using ArturRios.Util.WebApi.Security.Constants;
+using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace ArturRios.Util.WebApi.Security.Attributes;
 
-/// <summary>Rejects requests with a 401 response unless an <see cref="AuthenticatedUser"/> was attached to the
+/// <summary>Rejects requests with a 401 response unless an <see cref="IAuthenticatedUser"/> was attached to the
 /// context (typically by <see cref="Security.Middleware.AuthenticationMiddleware"/>), unless the action is marked with <see cref="AllowAnonymousAttribute"/>.</summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class AuthorizeAttribute : Attribute, IAuthorizationFilter
@@ -21,7 +22,7 @@ public class AuthorizeAttribute : Attribute, IAuthorizationFilter
             return;
         }
 
-        var user = (AuthenticatedUser?)context.HttpContext.Items["User"];
+        var user = context.HttpContext.Items[AuthenticationItemKeys.User] as IAuthenticatedUser;
 
         if (user is null)
         {

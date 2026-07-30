@@ -18,7 +18,7 @@ A typical setup registers the three built-in middlewares in this order:
 flowchart LR
     Client["Client request"] --> Trace["TraceActivityMiddleware<br/><i>assigns/propagates W3C traceparent</i>"]
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
-    Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches AuthenticatedUser</i>"]
+    Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches IAuthenticatedUser</i>"]
     Auth --> Endpoint["Controller / endpoint"]
     Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
@@ -57,8 +57,8 @@ flowchart TB
     Jwt -- "yes" --> JwtValid{"Signature valid?"}
     JwtValid -- "no" --> Google
     JwtValid -- "yes" --> Mode{"JwtMode"}
-    Mode -- "ClaimsOnly (default)" --> Claims["AuthenticatedUserFactory.FromToken<br/><i>id + role claims, no lookup</i>"]
-    Mode -- "Revalidate" --> ProviderId["IAuthenticationProvider.GetAuthenticatedUserById<br/><i>resolved per-request from RequestServices</i>"]
+    Mode -- "ClaimsOnly (default)" --> Claims["mapper.FromClaims<br/><i>your claims, no lookup</i>"]
+    Mode -- "Revalidate" --> ProviderId["IAuthenticationProvider.GetAuthenticatedUserById<br/><i>Guid id, resolved per-request from RequestServices</i>"]
 
     Jwt -- "no" --> Google{"EnableGoogle?"}
     Google -- "yes" --> GoogleValid{"Google ID token valid?"}
@@ -80,12 +80,13 @@ flowchart TB
     RoleReq --> Endpoint["Controller action"]
 ```
 
-For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the user is rebuilt
-straight from the token's `id` and `role` claims, so authentication costs nothing beyond the signature
+For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the registered mapper
+rebuilds the user straight from the token's claims, so authentication costs nothing beyond the signature
 check. `Revalidate` instead resolves `IAuthenticationProvider` from the current request's
-`HttpContext.RequestServices` and calls `GetAuthenticatedUserById` on every request, trading a lookup for
-freshness. The Google scheme always resolves the user via `IAuthenticationProvider.GetAuthenticatedUserByEmail`
-after verifying the token, so an `IAuthenticationProvider` is required whenever Google authentication is
+`HttpContext.RequestServices` and calls `GetAuthenticatedUserById` with the Guid from the token's claims
+on every request, trading a lookup for freshness. The Google scheme always resolves the user via
+`IAuthenticationProvider.GetAuthenticatedUserByEmail` after verifying the token, so an
+`IAuthenticationProvider` is required whenever Google authentication is
 enabled, just as it is for JWT `Revalidate`. `CachedAuthenticationProvider` sits transparently in front of
 any `IAuthenticationProvider` (registered via `AddCachedAuthenticationProvider<T>`) to absorb repeated
 lookups of the same user within a short TTL, without any mode needing to know it's there.

@@ -1,6 +1,9 @@
-﻿namespace ArturRios.Util.WebApi.Security.Records;
+using ArturRios.Util.WebApi.Security.Interfaces;
 
-/// <summary>Represents the user identity attached to the current request after successful JWT authentication.</summary>
+namespace ArturRios.Util.WebApi.Security.Records;
+
+/// <summary>The default <see cref="IAuthenticatedUser"/>, for apps that need nothing beyond an id and a role.
+/// Attached to the current request after successful authentication.</summary>
 /// <param name="Id">The user's id.</param>
-/// <param name="Role">The user's role.</param>
-public record AuthenticatedUser(int Id, int Role);
+/// <param name="RoleId">The user's role id.</param>
+public record AuthenticatedUser(Guid Id, int RoleId) : IAuthenticatedUser;
