@@ -1,6 +1,7 @@
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
+using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Providers;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,12 @@ public class AuthenticationServiceCollectionExtensionsTests
     {
         public IAuthenticatedUser? GetAuthenticatedUserById(Guid id) => new AuthenticatedUser(id, 1);
         public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
+    }
+
+    private sealed class StubMapper : IAuthenticatedUserMapper
+    {
+        public Dictionary<string, string> ToClaims(IAuthenticatedUser user) => new();
+        public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims) => null;
     }
 
     [Fact]
@@ -73,5 +80,25 @@ public class AuthenticationServiceCollectionExtensionsTests
         Assert.Equal(2, validatorDescriptors.Length);
         Assert.Equal(typeof(JwtTokenValidator), validatorDescriptors[0].ImplementationType);
         Assert.Equal(typeof(GoogleTokenValidator), validatorDescriptors[1].ImplementationType);
+    }
+
+    [Fact]
+    public void AddTokenAuthentication_RegistersDefaultMapper_WhenNoneSpecified()
+    {
+        var services = new ServiceCollection();
+        services.AddTokenAuthentication(_ => { });
+
+        var descriptor = Assert.Single(services.Where(d => d.ServiceType == typeof(IAuthenticatedUserMapper)));
+        Assert.Equal(typeof(DefaultAuthenticatedUserMapper), descriptor.ImplementationType);
+    }
+
+    [Fact]
+    public void AddTokenAuthentication_RegistersGivenMapper_WhenSpecified()
+    {
+        var services = new ServiceCollection();
+        services.AddTokenAuthentication<StubMapper>(_ => { });
+
+        var descriptor = Assert.Single(services.Where(d => d.ServiceType == typeof(IAuthenticatedUserMapper)));
+        Assert.Equal(typeof(StubMapper), descriptor.ImplementationType);
     }
 }

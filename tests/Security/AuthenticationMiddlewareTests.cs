@@ -5,8 +5,8 @@ using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Enums;
-using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
+using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Middleware;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
@@ -21,6 +21,7 @@ public class AuthenticationMiddlewareTests
 
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
     private static readonly Guid OtherId = Guid.Parse("7b644d0a-9f11-4c5d-8e6a-4b903f2a9c1e");
+    private static readonly DefaultAuthenticatedUserMapper Mapper = new();
 
     private sealed class StubProvider(IAuthenticatedUser? byId = null, IAuthenticatedUser? byEmail = null) : IAuthenticationProvider
     {
@@ -45,7 +46,7 @@ public class AuthenticationMiddlewareTests
         new(next, EmptySettings(), options, validators);
 
     private static ITokenValidator Jwt(AuthenticationOptions options) =>
-        new JwtTokenValidator(Config(), new JwtHandler(), options);
+        new JwtTokenValidator(Config(), new JwtHandler(), Mapper, options);
 
     private static (DefaultHttpContext Context, StringBuilder Log) BuildContext(
         string? headerToken, IAuthenticationProvider? provider, string? cookieName = null, string? cookieValue = null)
@@ -81,7 +82,7 @@ public class AuthenticationMiddlewareTests
     public async Task Jwt_ClaimsOnly_SetsUserAndCallsNext()
     {
         var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
-        var token = CreateToken(new AuthenticatedUser(UserId, 3).ToTokenClaims());
+        var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
         var (context, log) = BuildContext(token, provider: null);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
 
@@ -110,7 +111,7 @@ public class AuthenticationMiddlewareTests
     public async Task CookieSource_ReadsTokenFromCookie()
     {
         var options = new AuthenticationOptions { Source = TokenSource.Cookie, CookieName = "access_token" };
-        var token = CreateToken(new AuthenticatedUser(UserId, 1).ToTokenClaims());
+        var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(UserId, 1)));
         var (context, log) = BuildContext(headerToken: null, provider: null, cookieName: "access_token", cookieValue: token);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
 
@@ -140,7 +141,7 @@ public class AuthenticationMiddlewareTests
     public async Task BothEnabled_AcceptsAppJwt()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
-        var token = CreateToken(new AuthenticatedUser(OtherId, 1).ToTokenClaims());
+        var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(OtherId, 1)));
         var (context, log) = BuildContext(token, provider: null);
         var google = new GoogleTokenValidator(new FakeVerifier(payload: null), options);
         var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options), google]);
