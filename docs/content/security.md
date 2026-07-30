@@ -219,7 +219,7 @@ public class AccountsController : ControllerBase
   `[AllowAnonymous]` and returns immediately (no 401) if present.
 - **`[RoleRequirement(params int[] authorizedRoles)]`** — a `TypeFilterAttribute` around
   `RoleRequirementFilter`. It reads the same `HttpContext.Items["User"]`; if the user is present and its
-  `Role` is one of `authorizedRoles`, the request proceeds, otherwise it short-circuits with a 403
+  `RoleId` is one of `authorizedRoles`, the request proceeds, otherwise it short-circuits with a 403
   (a `ProcessOutput` with the error `"You do not have permission to access this resource"`). It also
   honors `[AllowAnonymous]` — an anonymous-marked action returns immediately without a role check, even
   under `[RoleRequirement(...)]`.

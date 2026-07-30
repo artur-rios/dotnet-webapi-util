@@ -81,7 +81,7 @@ flowchart TB
 ```
 
 For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the user is rebuilt
-straight from the token's `id` and `role` claims, so authentication costs nothing beyond the signature
+straight from the token's claims by the registered mapper, so authentication costs nothing beyond the signature
 check. `Revalidate` instead resolves `IAuthenticationProvider` from the current request's
 `HttpContext.RequestServices` and calls `GetAuthenticatedUserById` with the Guid from the token's claims
 on every request, trading a lookup for freshness. The Google scheme always resolves the user via `IAuthenticationProvider.GetAuthenticatedUserByEmail`
