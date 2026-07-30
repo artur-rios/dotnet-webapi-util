@@ -57,8 +57,8 @@ flowchart TB
     Jwt -- "yes" --> JwtValid{"Signature valid?"}
     JwtValid -- "no" --> Google
     JwtValid -- "yes" --> Mode{"JwtMode"}
-    Mode -- "ClaimsOnly (default)" --> Claims["AuthenticatedUserFactory.FromToken<br/><i>id + role claims, no lookup</i>"]
-    Mode -- "Revalidate" --> ProviderId["IAuthenticationProvider.GetAuthenticatedUserById<br/><i>resolved per-request from RequestServices</i>"]
+    Mode -- "ClaimsOnly (default)" --> Claims["mapper.FromClaims<br/><i>your claims, no lookup</i>"]
+    Mode -- "Revalidate" --> ProviderId["IAuthenticationProvider.GetAuthenticatedUserById<br/><i>Guid id, resolved per-request from RequestServices</i>"]
 
     Jwt -- "no" --> Google{"EnableGoogle?"}
     Google -- "yes" --> GoogleValid{"Google ID token valid?"}
@@ -83,8 +83,8 @@ flowchart TB
 For the app JWT scheme, `ClaimsOnly` (the default) never touches a data store — the user is rebuilt
 straight from the token's `id` and `role` claims, so authentication costs nothing beyond the signature
 check. `Revalidate` instead resolves `IAuthenticationProvider` from the current request's
-`HttpContext.RequestServices` and calls `GetAuthenticatedUserById` on every request, trading a lookup for
-freshness. The Google scheme always resolves the user via `IAuthenticationProvider.GetAuthenticatedUserByEmail`
+`HttpContext.RequestServices` and calls `GetAuthenticatedUserById` with the Guid from the token's claims
+on every request, trading a lookup for freshness. The Google scheme always resolves the user via `IAuthenticationProvider.GetAuthenticatedUserByEmail`
 after verifying the token, so an `IAuthenticationProvider` is required whenever Google authentication is
 enabled, just as it is for JWT `Revalidate`. `CachedAuthenticationProvider` sits transparently in front of
 any `IAuthenticationProvider` (registered via `AddCachedAuthenticationProvider<T>`) to absorb repeated

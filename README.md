@@ -109,9 +109,12 @@ For the app JWT, how the user is resolved is controlled by `AuthenticationOption
   store is queried, so authentication costs nothing beyond the signature check. Because nothing is
   re-checked server-side, role changes and revocations only take effect once the token expires — keep
   access-token lifetimes short and use refresh tokens.
-- **`Revalidate`** — `IAuthenticationProvider.GetAuthenticatedUserById` is called on every request
+- **`Revalidate`** — `IAuthenticationProvider.GetAuthenticatedUserById(Guid)` is called on every request
   (resolved per-request from the request scope). Guarantees freshness and lets deleted users be
   rejected immediately, at the cost of one lookup per request.
+- **Your own identity** — implement `IAuthenticatedUser` (`Guid Id`, `int RoleId`) on your own type and an
+  `IAuthenticatedUserMapper` to decide what your tokens carry; read it back with
+  `HttpContext.GetUser<MyUser>()`. See [Security](https://artur-rios.github.io/dotnet-webapi-util/security/).
 
 A Google ID token is always resolved by looking up the token's verified email through
 `IAuthenticationProvider.GetAuthenticatedUserByEmail`, so an `IAuthenticationProvider` is **required**

@@ -67,16 +67,15 @@ When `EnableJwt` is `true`, `JwtTokenValidator` first checks the token's signatu
 `JwtHandler.IsTokenValidAsync`; an invalid or missing token fails with `"Invalid token"`. How the user is
 then resolved is controlled by `AuthenticationOptions.JwtMode`:
 
-- **`ClaimsOnly` (default)** — `AuthenticatedUserFactory.FromToken` rebuilds the user from the token's
-  `id` and `role` claims. No data store is queried, so authentication costs nothing beyond the signature
-  check. The trade-off: because nothing is re-checked server-side, role changes and revocations only take
-  effect once the token expires. Keep access-token lifetimes short and pair this mode with refresh
-  tokens.
-- **`Revalidate`** — the user id is read from the token, and `IAuthenticationProvider` is resolved
-  **per-request** from `HttpContext.RequestServices` (so it can be a scoped service) and its
-  `GetAuthenticatedUserById` is called. This guarantees freshness — a deleted or role-changed user is
-  rejected or updated on the very next request — at the cost of one lookup per request. An
-  `IAuthenticationProvider` **must** be registered for this mode.
+- **`ClaimsOnly` (default)** — the registered mapper's `FromClaims` rebuilds the user from the token's
+  claims. No data store is queried, so authentication costs nothing beyond the signature check. The
+  trade-off: because nothing is re-checked server-side, role changes and revocations only take effect
+  once the token expires. Keep access-token lifetimes short and pair this mode with refresh tokens.
+- **`Revalidate`** — the user id is read from the token by the mapper's `IdFromClaims`, and
+  `IAuthenticationProvider` is resolved **per-request** from `HttpContext.RequestServices` (so it can be a
+  scoped service) and its `GetAuthenticatedUserById` is called. This guarantees freshness — a deleted or
+  role-changed user is rejected or updated on the very next request — at the cost of one lookup per
+  request. An `IAuthenticationProvider` **must** be registered for this mode.
 
 ## Google authentication
 
@@ -128,29 +127,76 @@ it as a plain `IAuthenticationProvider` and don't need to know caching is happen
 
 ## Identity types
 
-- **`AuthenticatedUser(string Id, int Role)`** — the record attached to `HttpContext.Items["User"]` after
-  successful authentication, and returned by both `IAuthenticationProvider.GetAuthenticatedUserById` and
-  `IAuthenticationProvider.GetAuthenticatedUserByEmail`.
-- **`TokenClaimKeys`** — the claim key constants used on both ends of the token: `Id = "id"`,
-  `Role = "role"`.
-- **`AuthenticationExtensions.ToTokenClaims(this AuthenticatedUser)`** — converts an `AuthenticatedUser`
-  into a `Dictionary<string, string>` keyed by `TokenClaimKeys`, ready to hand to your JWT-issuing code
-  when you build the token at login time.
-- **`AuthenticatedUserFactory.FromToken(string token)`** — reads a token's `id`/`role` claims (without
-  validating its signature — callers must have already done that) and returns the reconstructed
-  `AuthenticatedUser`, or `null` if the token can't be read, has a blank `id` claim, or is missing a
-  numeric `role` claim. This is what `JwtTokenValidator` calls in `ClaimsOnly` mode.
-- **`AuthenticatedUserFactory.IdFromToken(string token)`** — reads just the `id` claim, returning it
-  verbatim (any string — a numeric id, a GUID, an external subject) or `null` if the token can't be read
-  or the claim is blank. This is what `JwtTokenValidator` calls in `Revalidate` mode before the provider
-  lookup.
+The library knows exactly two things about a user — an id and a role id — and leaves everything else,
+including the token's claim keys, to the app.
+
+- **`IAuthenticatedUser`** — `Guid Id` and `int RoleId`. Implement it on your own type, adding whatever
+  else your app needs; instances are attached to the current request after successful authentication and
+  returned by both `IAuthenticationProvider` methods.
+- **`AuthenticatedUser(Guid Id, int RoleId)`** — the default implementation, for apps that need nothing
+  extra.
+- **`IAuthenticatedUserMapper`** — translates between your user and your claims, in both directions:
+  `ToClaims(IAuthenticatedUser)` builds the claims you embed at login, `FromClaims(...)` rebuilds the user
+  during `ClaimsOnly` validation, and `IdFromClaims(...)` reads just the id for `Revalidate` mode
+  (a default implementation delegates to `FromClaims`; override it when your token carries more than
+  `FromClaims` needs). Implementations must return `null` for claims they cannot interpret rather than
+  throwing — use `TryParse`, not `Parse`.
+- **`DefaultAuthenticatedUserMapper`** — used when you register no mapper of your own. Maps `Id`/`RoleId`
+  through `TokenClaimKeys` and produces an `AuthenticatedUser`.
+- **`TokenClaimKeys`** — the claim keys the default mapper uses: `Id = "id"`, `RoleId = "role"`. A custom
+  mapper may use any keys it likes.
+- **`TokenClaimsReader.Read(string token)`** — reads a token's claims into a dictionary without validating
+  its signature (callers must have already done that), or `null` if the token can't be read. A repeated
+  claim key keeps its first occurrence.
+- **`HttpContext.GetUser<TUser>()`** — the authenticated user as your own type, or `null` if the request
+  isn't authenticated or the attached user is another type. `GetUser()` returns `IAuthenticatedUser?`.
+
+```csharp
+public record MyUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+public class MyUserMapper : IAuthenticatedUserMapper
+{
+    private const string TenantClaim = "tenant";
+
+    public Dictionary<string, string> ToClaims(IAuthenticatedUser user) =>
+        new()
+        {
+            { TokenClaimKeys.Id, user.Id.ToString() },
+            { TokenClaimKeys.RoleId, user.RoleId.ToString() },
+            { TenantClaim, ((MyUser)user).TenantId }
+        };
+
+    public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
+    {
+        if (!claims.TryGetValue(TokenClaimKeys.Id, out var id) || !Guid.TryParse(id, out var userId) ||
+            !claims.TryGetValue(TokenClaimKeys.RoleId, out var role) || !int.TryParse(role, out var roleId))
+        {
+            return null;
+        }
+
+        claims.TryGetValue(TenantClaim, out var tenantId);
+
+        return new MyUser(userId, roleId, tenantId ?? string.Empty);
+    }
+}
+```
+
+Register it with the generic overload; omit the type argument to get `DefaultAuthenticatedUserMapper`:
+
+```csharp
+builder.Services.AddTokenAuthentication<MyUserMapper>(options => { /* ... */ });
+```
 
 ```mermaid
 flowchart LR
-    User["AuthenticatedUser"] -- "ToTokenClaims()" --> Claims["id / role claims"]
+    User["your IAuthenticatedUser"] -- "mapper.ToClaims()" --> Claims["your claims"]
     Claims -- "embedded in JWT at login" --> Token["Bearer token"]
-    Token -- "AuthenticatedUserFactory.FromToken()" --> User2["AuthenticatedUser"]
+    Token -- "TokenClaimsReader.Read()" --> Claims2["claims dictionary"]
+    Claims2 -- "mapper.FromClaims()" --> User2["your IAuthenticatedUser"]
 ```
+
+Because `ToClaims` takes the interface, a mapper writing extra claims casts to its own type. The cast is
+safe: the same app owns the user type, the mapper, and the provider that produced the user.
 
 ## Declaring access rules
 
