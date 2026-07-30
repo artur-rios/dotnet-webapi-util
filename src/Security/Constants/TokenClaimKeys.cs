@@ -1,7 +1,7 @@
 namespace ArturRios.Util.WebApi.Security.Constants;
 
 /// <summary>
-/// The claim keys used by the library's default authenticated-user mapper to embed and read
+/// The claim keys used by <see cref="Mappers.DefaultAuthenticatedUserMapper"/> to embed and read
 /// authenticated-user data in JSON Web Tokens. A custom mapper may use any keys it likes.
 /// </summary>
 public static class TokenClaimKeys
