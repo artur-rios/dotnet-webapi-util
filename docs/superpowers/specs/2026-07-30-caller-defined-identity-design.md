@@ -156,7 +156,7 @@ read it.
 | `TokenClaimsReader` | **New.** JWT → claims dictionary, or null. |
 | `TokenClaimKeys` | Constant `Role` renamed `RoleId`; **string values unchanged** (`"id"`, `"role"`) so existing tokens still read. Documented as the default mapper's keys. |
 | `AuthenticationItemKeys` | **New**, internal. `User = "User"`. |
-| `HttpContextExtensions` | **New.** `GetUser()` → `IAuthenticatedUser?`; `GetUser<TUser>()` → `TUser?` where `TUser : IAuthenticatedUser`. |
+| `HttpContextExtensions` | **New.** `GetUser()` → `IAuthenticatedUser?`; `GetUser<TUser>()` → `TUser?` where `TUser : class, IAuthenticatedUser`. |
 | `IAuthenticationProvider` | `IAuthenticatedUser? GetAuthenticatedUserById(Guid id)`; `...ByEmail(string email)` returns the interface. |
 | `CachedAuthenticationProvider` | Caches `IAuthenticatedUser?`; same key prefixes and TTL semantics. |
 | `TokenValidationResult` | `(IAuthenticatedUser? User, string? Error)`. |
@@ -321,7 +321,10 @@ Breaking for consumers, so `2.1.0` → `3.0.0` in
 |---|---|
 | `new AuthenticatedUser(id, role)` | `new AuthenticatedUser(guid, roleId)`, or the app's own `IAuthenticatedUser` |
 | `user.Role` | `user.RoleId` |
+| `TokenClaimKeys.Role` | `TokenClaimKeys.RoleId` — the claim string is still `"role"` |
 | `GetAuthenticatedUserById(int id)` | `GetAuthenticatedUserById(Guid id)` returning `IAuthenticatedUser?` |
+| `GetAuthenticatedUserByEmail(string email)` returning `AuthenticatedUser?` | same parameter, now returning `IAuthenticatedUser?` |
+| `TokenValidationResult(AuthenticatedUser?, string?)` | `TokenValidationResult(IAuthenticatedUser?, string?)` — affects custom `ITokenValidator` implementations |
 | `user.ToTokenClaims()` | `mapper.ToClaims(user)` |
 | `AuthenticatedUserFactory.FromToken(token)` | `TokenClaimsReader.Read(token)` + `mapper.FromClaims(claims)` |
 | `(AuthenticatedUser?)HttpContext.Items["User"]` | `HttpContext.GetUser<MyUser>()` |

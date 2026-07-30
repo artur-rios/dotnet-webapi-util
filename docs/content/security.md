@@ -56,7 +56,7 @@ the pipeline). For each request it:
 1. Skips validation entirely for Swagger routes and for endpoints marked `[AllowAnonymous]`.
 2. Extracts the token per `AuthenticationOptions.Source`, as above.
 3. Runs the token through the enabled validators, in registration order (app JWT, then Google). The first
-   validator that resolves an `AuthenticatedUser` wins: it's attached to `HttpContext.Items["User"]` and
+   validator that resolves an `IAuthenticatedUser` wins: it's attached to `HttpContext.Items["User"]` and
    the next middleware runs.
 4. If no validator resolves a user, the request gets a 401 with the last validator's error (e.g.
    `"Invalid token"`, `"Invalid Google token"`, `"User not found"`).
@@ -140,7 +140,8 @@ including the token's claim keys, to the app.
   during `ClaimsOnly` validation, and `IdFromClaims(...)` reads just the id for `Revalidate` mode
   (a default implementation delegates to `FromClaims`; override it when your token carries more than
   `FromClaims` needs). Implementations must return `null` for claims they cannot interpret rather than
-  throwing — use `TryParse`, not `Parse`.
+  throwing — use `TryParse`, not `Parse`. `AddTokenAuthentication` resolves your mapper as a singleton, so
+  it must stay stateless and free of scoped dependencies (a `DbContext`, a request-scoped tenant accessor).
 - **`DefaultAuthenticatedUserMapper`** — used when you register no mapper of your own. Maps `Id`/`RoleId`
   through `TokenClaimKeys` and produces an `AuthenticatedUser`.
 - **`TokenClaimKeys`** — the claim keys the default mapper uses: `Id = "id"`, `RoleId = "role"`. A custom
@@ -273,3 +274,35 @@ revocations bounded.
   and wiring up `ConfigureSecurity()`.
 - **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — how `ExceptionMiddleware` and
   `TraceActivityMiddleware` relate to the rest of the pipeline `AuthenticationMiddleware` runs in.
+
+## Migrating from 2.x
+
+`3.0.0` makes the authenticated-user type and the token's claim keys caller-defined. Where the library
+used to hard-code `AuthenticatedUser(int Id, int Role)`, it now only knows `IAuthenticatedUser` (`Guid
+Id`, `int RoleId`) — implement your own, or keep using the library's `AuthenticatedUser(Guid Id, int
+RoleId)`.
+
+| Before | After |
+|---|---|
+| `AuthenticatedUser(int Id, int Role)` | `AuthenticatedUser(Guid Id, int RoleId)`, or your own `IAuthenticatedUser` |
+| `user.Role` | `user.RoleId` |
+| `TokenClaimKeys.Role` | `TokenClaimKeys.RoleId` — the claim string is still `"role"` |
+| `GetAuthenticatedUserById(int id)` returning `AuthenticatedUser?` | `GetAuthenticatedUserById(Guid id)` returning `IAuthenticatedUser?` |
+| `GetAuthenticatedUserByEmail(string email)` returning `AuthenticatedUser?` | same parameter, now returning `IAuthenticatedUser?` |
+| `TokenValidationResult(AuthenticatedUser?, string?)` | `TokenValidationResult(IAuthenticatedUser?, string?)` — affects custom `ITokenValidator` implementations |
+| `user.ToTokenClaims()` | `mapper.ToClaims(user)` |
+| `AuthenticatedUserFactory.FromToken(token)` | `TokenClaimsReader.Read(token)` then `mapper.FromClaims(claims)` |
+| `(AuthenticatedUser?)HttpContext.Items["User"]` | `HttpContext.GetUser<MyUser>()` |
+
+Two things to plan around before you deploy this upgrade:
+
+**Tokens issued by 2.x are rejected after the upgrade.** The claim key strings are unchanged, so the
+claims still *read* — but `DefaultAuthenticatedUserMapper` requires the `id` claim to parse as a `Guid`,
+and 2.x wrote an integer there. Every unexpired access token therefore fails with a 401
+(`"Could not retrieve user from token"`, or `"Could not retrieve user id from token"` in `Revalidate`
+mode). This is fail-closed and safe, but it logs every user out at the moment of deployment. Plan for
+it: drain the old tokens before switching over, accept the forced re-authentication, or ship a mapper
+that accepts both an integer and a `Guid` in the `id` claim for one release.
+
+**User ids must become `Guid`s.** If your store keys users by integer, this is a data migration, not
+just a compile fix.

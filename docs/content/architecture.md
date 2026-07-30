@@ -18,7 +18,7 @@ A typical setup registers the three built-in middlewares in this order:
 flowchart LR
     Client["Client request"] --> Trace["TraceActivityMiddleware<br/><i>assigns/propagates W3C traceparent</i>"]
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
-    Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches AuthenticatedUser</i>"]
+    Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches IAuthenticatedUser</i>"]
     Auth --> Endpoint["Controller / endpoint"]
     Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
