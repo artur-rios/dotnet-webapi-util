@@ -9,7 +9,7 @@ middleware type on the app <strong>in the order supplied</strong>, skipping any 
 A typical setup registers the three built-in middlewares in this order:</p><pre class=mermaid>flowchart LR
     Client[&#34;Client request&#34;] --&gt; Trace[&#34;TraceActivityMiddleware&lt;br/&gt;&lt;i&gt;assigns/propagates W3C traceparent&lt;/i&gt;&#34;]
     Trace --&gt; Exception[&#34;ExceptionMiddleware&lt;br/&gt;&lt;i&gt;catches unhandled exceptions&lt;/i&gt;&#34;]
-    Exception --&gt; Auth[&#34;AuthenticationMiddleware&lt;br/&gt;&lt;i&gt;validates token, attaches AuthenticatedUser&lt;/i&gt;&#34;]
+    Exception --&gt; Auth[&#34;AuthenticationMiddleware&lt;br/&gt;&lt;i&gt;validates token, attaches IAuthenticatedUser&lt;/i&gt;&#34;]
     Auth --&gt; Endpoint[&#34;Controller / endpoint&#34;]
     Endpoint --&gt; Resolver[&#34;ResponseResolver&lt;br/&gt;&lt;i&gt;Output envelope → ActionResult&lt;/i&gt;&#34;]
     Resolver --&gt; Client
@@ -32,8 +32,8 @@ lifecycle.</p><h2 id=security-model>Security model<a href=#security-model class=
     Jwt -- &#34;yes&#34; --&gt; JwtValid{&#34;Signature valid?&#34;}
     JwtValid -- &#34;no&#34; --&gt; Google
     JwtValid -- &#34;yes&#34; --&gt; Mode{&#34;JwtMode&#34;}
-    Mode -- &#34;ClaimsOnly (default)&#34; --&gt; Claims[&#34;AuthenticatedUserFactory.FromToken&lt;br/&gt;&lt;i&gt;id + role claims, no lookup&lt;/i&gt;&#34;]
-    Mode -- &#34;Revalidate&#34; --&gt; ProviderId[&#34;IAuthenticationProvider.GetAuthenticatedUserById&lt;br/&gt;&lt;i&gt;resolved per-request from RequestServices&lt;/i&gt;&#34;]
+    Mode -- &#34;ClaimsOnly (default)&#34; --&gt; Claims[&#34;mapper.FromClaims&lt;br/&gt;&lt;i&gt;your claims, no lookup&lt;/i&gt;&#34;]
+    Mode -- &#34;Revalidate&#34; --&gt; ProviderId[&#34;IAuthenticationProvider.GetAuthenticatedUserById&lt;br/&gt;&lt;i&gt;Guid id, resolved per-request from RequestServices&lt;/i&gt;&#34;]
 
     Jwt -- &#34;no&#34; --&gt; Google{&#34;EnableGoogle?&#34;}
     Google -- &#34;yes&#34; --&gt; GoogleValid{&#34;Google ID token valid?&#34;}
@@ -53,12 +53,13 @@ lifecycle.</p><h2 id=security-model>Security model<a href=#security-model class=
     Items --&gt; Authorize[&#34;AuthorizeAttribute&lt;br/&gt;&lt;i&gt;401 if no user&lt;/i&gt;&#34;]
     Authorize --&gt; RoleReq[&#34;RoleRequirementFilter&lt;br/&gt;&lt;i&gt;403 if role not authorized&lt;/i&gt;&#34;]
     RoleReq --&gt; Endpoint[&#34;Controller action&#34;]
-</pre><p>For the app JWT scheme, <code>ClaimsOnly</code> (the default) never touches a data store — the user is rebuilt
-straight from the token&rsquo;s <code>id</code> and <code>role</code> claims, so authentication costs nothing beyond the signature
+</pre><p>For the app JWT scheme, <code>ClaimsOnly</code> (the default) never touches a data store — the registered mapper
+rebuilds the user straight from the token&rsquo;s claims, so authentication costs nothing beyond the signature
 check. <code>Revalidate</code> instead resolves <code>IAuthenticationProvider</code> from the current request&rsquo;s
-<code>HttpContext.RequestServices</code> and calls <code>GetAuthenticatedUserById</code> on every request, trading a lookup for
-freshness. The Google scheme always resolves the user via <code>IAuthenticationProvider.GetAuthenticatedUserByEmail</code>
-after verifying the token, so an <code>IAuthenticationProvider</code> is required whenever Google authentication is
+<code>HttpContext.RequestServices</code> and calls <code>GetAuthenticatedUserById</code> with the Guid from the token&rsquo;s claims
+on every request, trading a lookup for freshness. The Google scheme always resolves the user via
+<code>IAuthenticationProvider.GetAuthenticatedUserByEmail</code> after verifying the token, so an
+<code>IAuthenticationProvider</code> is required whenever Google authentication is
 enabled, just as it is for JWT <code>Revalidate</code>. <code>CachedAuthenticationProvider</code> sits transparently in front of
 any <code>IAuthenticationProvider</code> (registered via <code>AddCachedAuthenticationProvider&lt;T></code>) to absorb repeated
 lookups of the same user within a short TTL, without any mode needing to know it&rsquo;s there.</p><p><code>AuthorizeAttribute</code> and <code>RoleRequirementFilter</code> both read the same <code>HttpContext.Items["User"]</code> slot that

@@ -16,7 +16,7 @@ A typical setup registers the three built-in middlewares in this order:&lt;/p&gt
 &lt;pre class="mermaid"&gt;flowchart LR
 Client[&amp;#34;Client request&amp;#34;] --&amp;gt; Trace[&amp;#34;TraceActivityMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;assigns/propagates W3C traceparent&amp;lt;/i&amp;gt;&amp;#34;]
 Trace --&amp;gt; Exception[&amp;#34;ExceptionMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;catches unhandled exceptions&amp;lt;/i&amp;gt;&amp;#34;]
-Exception --&amp;gt; Auth[&amp;#34;AuthenticationMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;validates token, attaches AuthenticatedUser&amp;lt;/i&amp;gt;&amp;#34;]
+Exception --&amp;gt; Auth[&amp;#34;AuthenticationMiddleware&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;validates token, attaches IAuthenticatedUser&amp;lt;/i&amp;gt;&amp;#34;]
 Auth --&amp;gt; Endpoint[&amp;#34;Controller / endpoint&amp;#34;]
 Endpoint --&amp;gt; Resolver[&amp;#34;ResponseResolver&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;Output envelope → ActionResult&amp;lt;/i&amp;gt;&amp;#34;]
 Resolver --&amp;gt; Client
@@ -45,8 +45,8 @@ Token[&amp;#34;Extracted token&amp;#34;] --&amp;gt; Jwt{&amp;#34;EnableJwt?&amp;
 Jwt -- &amp;#34;yes&amp;#34; --&amp;gt; JwtValid{&amp;#34;Signature valid?&amp;#34;}
 JwtValid -- &amp;#34;no&amp;#34; --&amp;gt; Google
 JwtValid -- &amp;#34;yes&amp;#34; --&amp;gt; Mode{&amp;#34;JwtMode&amp;#34;}
-Mode -- &amp;#34;ClaimsOnly (default)&amp;#34; --&amp;gt; Claims[&amp;#34;AuthenticatedUserFactory.FromToken&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;id + role claims, no lookup&amp;lt;/i&amp;gt;&amp;#34;]
-Mode -- &amp;#34;Revalidate&amp;#34; --&amp;gt; ProviderId[&amp;#34;IAuthenticationProvider.GetAuthenticatedUserById&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;resolved per-request from RequestServices&amp;lt;/i&amp;gt;&amp;#34;]
+Mode -- &amp;#34;ClaimsOnly (default)&amp;#34; --&amp;gt; Claims[&amp;#34;mapper.FromClaims&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;your claims, no lookup&amp;lt;/i&amp;gt;&amp;#34;]
+Mode -- &amp;#34;Revalidate&amp;#34; --&amp;gt; ProviderId[&amp;#34;IAuthenticationProvider.GetAuthenticatedUserById&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;Guid id, resolved per-request from RequestServices&amp;lt;/i&amp;gt;&amp;#34;]
 Jwt -- &amp;#34;no&amp;#34; --&amp;gt; Google{&amp;#34;EnableGoogle?&amp;#34;}
 Google -- &amp;#34;yes&amp;#34; --&amp;gt; GoogleValid{&amp;#34;Google ID token valid?&amp;#34;}
 GoogleValid -- &amp;#34;yes&amp;#34; --&amp;gt; ProviderEmail[&amp;#34;IAuthenticationProvider.GetAuthenticatedUserByEmail&amp;#34;]
@@ -63,12 +63,13 @@ Items --&amp;gt; Authorize[&amp;#34;AuthorizeAttribute&amp;lt;br/&amp;gt;&amp;lt
 Authorize --&amp;gt; RoleReq[&amp;#34;RoleRequirementFilter&amp;lt;br/&amp;gt;&amp;lt;i&amp;gt;403 if role not authorized&amp;lt;/i&amp;gt;&amp;#34;]
 RoleReq --&amp;gt; Endpoint[&amp;#34;Controller action&amp;#34;]
 &lt;/pre&gt;
-&lt;p&gt;For the app JWT scheme, &lt;code&gt;ClaimsOnly&lt;/code&gt; (the default) never touches a data store — the user is rebuilt
-straight from the token&amp;rsquo;s &lt;code&gt;id&lt;/code&gt; and &lt;code&gt;role&lt;/code&gt; claims, so authentication costs nothing beyond the signature
+&lt;p&gt;For the app JWT scheme, &lt;code&gt;ClaimsOnly&lt;/code&gt; (the default) never touches a data store — the registered mapper
+rebuilds the user straight from the token&amp;rsquo;s claims, so authentication costs nothing beyond the signature
 check. &lt;code&gt;Revalidate&lt;/code&gt; instead resolves &lt;code&gt;IAuthenticationProvider&lt;/code&gt; from the current request&amp;rsquo;s
-&lt;code&gt;HttpContext.RequestServices&lt;/code&gt; and calls &lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; on every request, trading a lookup for
-freshness. The Google scheme always resolves the user via &lt;code&gt;IAuthenticationProvider.GetAuthenticatedUserByEmail&lt;/code&gt;
-after verifying the token, so an &lt;code&gt;IAuthenticationProvider&lt;/code&gt; is required whenever Google authentication is
+&lt;code&gt;HttpContext.RequestServices&lt;/code&gt; and calls &lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; with the Guid from the token&amp;rsquo;s claims
+on every request, trading a lookup for freshness. The Google scheme always resolves the user via
+&lt;code&gt;IAuthenticationProvider.GetAuthenticatedUserByEmail&lt;/code&gt; after verifying the token, so an
+&lt;code&gt;IAuthenticationProvider&lt;/code&gt; is required whenever Google authentication is
 enabled, just as it is for JWT &lt;code&gt;Revalidate&lt;/code&gt;. &lt;code&gt;CachedAuthenticationProvider&lt;/code&gt; sits transparently in front of
 any &lt;code&gt;IAuthenticationProvider&lt;/code&gt; (registered via &lt;code&gt;AddCachedAuthenticationProvider&amp;lt;T&amp;gt;&lt;/code&gt;) to absorb repeated
 lookups of the same user within a short TTL, without any mode needing to know it&amp;rsquo;s there.&lt;/p&gt;
@@ -933,7 +934,7 @@ the pipeline). For each request it:&lt;/p&gt;
 &lt;li&gt;Skips validation entirely for Swagger routes and for endpoints marked &lt;code&gt;[AllowAnonymous]&lt;/code&gt;.&lt;/li&gt;
 &lt;li&gt;Extracts the token per &lt;code&gt;AuthenticationOptions.Source&lt;/code&gt;, as above.&lt;/li&gt;
 &lt;li&gt;Runs the token through the enabled validators, in registration order (app JWT, then Google). The first
-validator that resolves an &lt;code&gt;AuthenticatedUser&lt;/code&gt; wins: it&amp;rsquo;s attached to &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; and
+validator that resolves an &lt;code&gt;IAuthenticatedUser&lt;/code&gt; wins: it&amp;rsquo;s attached to &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; and
 the next middleware runs.&lt;/li&gt;
 &lt;li&gt;If no validator resolves a user, the request gets a 401 with the last validator&amp;rsquo;s error (e.g.
 &lt;code&gt;&amp;quot;Invalid token&amp;quot;&lt;/code&gt;, &lt;code&gt;&amp;quot;Invalid Google token&amp;quot;&lt;/code&gt;, &lt;code&gt;&amp;quot;User not found&amp;quot;&lt;/code&gt;).&lt;/li&gt;
@@ -943,16 +944,15 @@ the next middleware runs.&lt;/li&gt;
 &lt;code&gt;JwtHandler.IsTokenValidAsync&lt;/code&gt;; an invalid or missing token fails with &lt;code&gt;&amp;quot;Invalid token&amp;quot;&lt;/code&gt;. How the user is
 then resolved is controlled by &lt;code&gt;AuthenticationOptions.JwtMode&lt;/code&gt;:&lt;/p&gt;
 &lt;ul&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;ClaimsOnly&lt;/code&gt; (default)&lt;/strong&gt; — &lt;code&gt;AuthenticatedUserFactory.FromToken&lt;/code&gt; rebuilds the user from the token&amp;rsquo;s
-&lt;code&gt;id&lt;/code&gt; and &lt;code&gt;role&lt;/code&gt; claims. No data store is queried, so authentication costs nothing beyond the signature
-check. The trade-off: because nothing is re-checked server-side, role changes and revocations only take
-effect once the token expires. Keep access-token lifetimes short and pair this mode with refresh
-tokens.&lt;/li&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;Revalidate&lt;/code&gt;&lt;/strong&gt; — the user id is read from the token, and &lt;code&gt;IAuthenticationProvider&lt;/code&gt; is resolved
-&lt;strong&gt;per-request&lt;/strong&gt; from &lt;code&gt;HttpContext.RequestServices&lt;/code&gt; (so it can be a scoped service) and its
-&lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; is called. This guarantees freshness — a deleted or role-changed user is
-rejected or updated on the very next request — at the cost of one lookup per request. An
-&lt;code&gt;IAuthenticationProvider&lt;/code&gt; &lt;strong&gt;must&lt;/strong&gt; be registered for this mode.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;ClaimsOnly&lt;/code&gt; (default)&lt;/strong&gt; — the registered mapper&amp;rsquo;s &lt;code&gt;FromClaims&lt;/code&gt; rebuilds the user from the token&amp;rsquo;s
+claims. No data store is queried, so authentication costs nothing beyond the signature check. The
+trade-off: because nothing is re-checked server-side, role changes and revocations only take effect
+once the token expires. Keep access-token lifetimes short and pair this mode with refresh tokens.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Revalidate&lt;/code&gt;&lt;/strong&gt; — the user id is read from the token by the mapper&amp;rsquo;s &lt;code&gt;IdFromClaims&lt;/code&gt;, and
+&lt;code&gt;IAuthenticationProvider&lt;/code&gt; is resolved &lt;strong&gt;per-request&lt;/strong&gt; from &lt;code&gt;HttpContext.RequestServices&lt;/code&gt; (so it can be a
+scoped service) and its &lt;code&gt;GetAuthenticatedUserById&lt;/code&gt; is called. This guarantees freshness — a deleted or
+role-changed user is rejected or updated on the very next request — at the cost of one lookup per
+request. An &lt;code&gt;IAuthenticationProvider&lt;/code&gt; &lt;strong&gt;must&lt;/strong&gt; be registered for this mode.&lt;/li&gt;
 &lt;/ul&gt;
 &lt;h2 id="google-authentication"&gt;Google authentication&lt;/h2&gt;
 &lt;p&gt;When &lt;code&gt;EnableGoogle&lt;/code&gt; is &lt;code&gt;true&lt;/code&gt;, &lt;code&gt;GoogleTokenValidator&lt;/code&gt; verifies the token via &lt;code&gt;IGoogleTokenVerifier&lt;/code&gt; — by
@@ -994,25 +994,68 @@ staleness to the TTL while collapsing bursts of requests for the same user into 
 &lt;code&gt;AuthenticationMiddleware&lt;/code&gt; (for both the JWT &lt;code&gt;Revalidate&lt;/code&gt; and Google schemes) and your own code both see
 it as a plain &lt;code&gt;IAuthenticationProvider&lt;/code&gt; and don&amp;rsquo;t need to know caching is happening.&lt;/p&gt;
 &lt;h2 id="identity-types"&gt;Identity types&lt;/h2&gt;
+&lt;p&gt;The library knows exactly two things about a user — an id and a role id — and leaves everything else,
+including the token&amp;rsquo;s claim keys, to the app.&lt;/p&gt;
 &lt;ul&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticatedUser(int Id, int Role)&lt;/code&gt;&lt;/strong&gt; — the record attached to &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt; after
-successful authentication, and returned by both &lt;code&gt;IAuthenticationProvider.GetAuthenticatedUserById&lt;/code&gt; and
-&lt;code&gt;IAuthenticationProvider.GetAuthenticatedUserByEmail&lt;/code&gt;.&lt;/li&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;TokenClaimKeys&lt;/code&gt;&lt;/strong&gt; — the claim key constants used on both ends of the token: &lt;code&gt;Id = &amp;quot;id&amp;quot;&lt;/code&gt;,
-&lt;code&gt;Role = &amp;quot;role&amp;quot;&lt;/code&gt;.&lt;/li&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticationExtensions.ToTokenClaims(this AuthenticatedUser)&lt;/code&gt;&lt;/strong&gt; — converts an &lt;code&gt;AuthenticatedUser&lt;/code&gt;
-into a &lt;code&gt;Dictionary&amp;lt;string, string&amp;gt;&lt;/code&gt; keyed by &lt;code&gt;TokenClaimKeys&lt;/code&gt;, ready to hand to your JWT-issuing code
-when you build the token at login time.&lt;/li&gt;
-&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticatedUserFactory.FromToken(string token)&lt;/code&gt;&lt;/strong&gt; — reads a token&amp;rsquo;s &lt;code&gt;id&lt;/code&gt;/&lt;code&gt;role&lt;/code&gt; claims (without
-validating its signature — callers must have already done that) and returns the reconstructed
-&lt;code&gt;AuthenticatedUser&lt;/code&gt;, or &lt;code&gt;null&lt;/code&gt; if the token can&amp;rsquo;t be read or is missing a numeric &lt;code&gt;id&lt;/code&gt; or &lt;code&gt;role&lt;/code&gt; claim.
-This is what &lt;code&gt;JwtTokenValidator&lt;/code&gt; calls in &lt;code&gt;ClaimsOnly&lt;/code&gt; mode.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;IAuthenticatedUser&lt;/code&gt;&lt;/strong&gt; — &lt;code&gt;Guid Id&lt;/code&gt; and &lt;code&gt;int RoleId&lt;/code&gt;. Implement it on your own type, adding whatever
+else your app needs; instances are attached to the current request after successful authentication and
+returned by both &lt;code&gt;IAuthenticationProvider&lt;/code&gt; methods.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;AuthenticatedUser(Guid Id, int RoleId)&lt;/code&gt;&lt;/strong&gt; — the default implementation, for apps that need nothing
+extra.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;IAuthenticatedUserMapper&lt;/code&gt;&lt;/strong&gt; — translates between your user and your claims, in both directions:
+&lt;code&gt;ToClaims(IAuthenticatedUser)&lt;/code&gt; builds the claims you embed at login, &lt;code&gt;FromClaims(...)&lt;/code&gt; rebuilds the user
+during &lt;code&gt;ClaimsOnly&lt;/code&gt; validation, and &lt;code&gt;IdFromClaims(...)&lt;/code&gt; reads just the id for &lt;code&gt;Revalidate&lt;/code&gt; mode
+(a default implementation delegates to &lt;code&gt;FromClaims&lt;/code&gt;; override it when your token carries more than
+&lt;code&gt;FromClaims&lt;/code&gt; needs). Implementations must return &lt;code&gt;null&lt;/code&gt; for claims they cannot interpret rather than
+throwing — use &lt;code&gt;TryParse&lt;/code&gt;, not &lt;code&gt;Parse&lt;/code&gt;. &lt;code&gt;AddTokenAuthentication&lt;/code&gt; resolves your mapper as a singleton, so
+it must stay stateless and free of scoped dependencies (a &lt;code&gt;DbContext&lt;/code&gt;, a request-scoped tenant accessor).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;DefaultAuthenticatedUserMapper&lt;/code&gt;&lt;/strong&gt; — used when you register no mapper of your own. Maps &lt;code&gt;Id&lt;/code&gt;/&lt;code&gt;RoleId&lt;/code&gt;
+through &lt;code&gt;TokenClaimKeys&lt;/code&gt; and produces an &lt;code&gt;AuthenticatedUser&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;TokenClaimKeys&lt;/code&gt;&lt;/strong&gt; — the claim keys the default mapper uses: &lt;code&gt;Id = &amp;quot;id&amp;quot;&lt;/code&gt;, &lt;code&gt;RoleId = &amp;quot;role&amp;quot;&lt;/code&gt;. A custom
+mapper may use any keys it likes.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;TokenClaimsReader.Read(string token)&lt;/code&gt;&lt;/strong&gt; — reads a token&amp;rsquo;s claims into a dictionary without validating
+its signature (callers must have already done that), or &lt;code&gt;null&lt;/code&gt; if the token can&amp;rsquo;t be read. A repeated
+claim key keeps its first occurrence.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;HttpContext.GetUser&amp;lt;TUser&amp;gt;()&lt;/code&gt;&lt;/strong&gt; — the authenticated user as your own type, or &lt;code&gt;null&lt;/code&gt; if the request
+isn&amp;rsquo;t authenticated or the attached user is another type. &lt;code&gt;GetUser()&lt;/code&gt; returns &lt;code&gt;IAuthenticatedUser?&lt;/code&gt;.&lt;/li&gt;
 &lt;/ul&gt;
-&lt;pre class="mermaid"&gt;flowchart LR
-User[&amp;#34;AuthenticatedUser&amp;#34;] -- &amp;#34;ToTokenClaims()&amp;#34; --&amp;gt; Claims[&amp;#34;id / role claims&amp;#34;]
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;record&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;MyUser&lt;/span&gt;(Guid Id, &lt;span style="color:#66d9ef"&gt;int&lt;/span&gt; RoleId, &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; TenantId) : IAuthenticatedUser;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;MyUserMapper&lt;/span&gt; : IAuthenticatedUserMapper
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;{
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;private&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;const&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt; TenantClaim = &lt;span style="color:#e6db74"&gt;&amp;#34;tenant&amp;#34;&lt;/span&gt;;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; Dictionary&amp;lt;&lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;, &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;&amp;gt; ToClaims(IAuthenticatedUser user) =&amp;gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;new&lt;/span&gt;()
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; { TokenClaimKeys.Id, user.Id.ToString() },
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; { TokenClaimKeys.RoleId, user.RoleId.ToString() },
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; { TenantClaim, ((MyUser)user).TenantId }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; };
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;public&lt;/span&gt; IAuthenticatedUser? FromClaims(IReadOnlyDictionary&amp;lt;&lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;, &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;&amp;gt; claims)
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;if&lt;/span&gt; (!claims.TryGetValue(TokenClaimKeys.Id, &lt;span style="color:#66d9ef"&gt;out&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;var&lt;/span&gt; id) || !Guid.TryParse(id, &lt;span style="color:#66d9ef"&gt;out&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;var&lt;/span&gt; userId) ||
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; !claims.TryGetValue(TokenClaimKeys.RoleId, &lt;span style="color:#66d9ef"&gt;out&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;var&lt;/span&gt; role) || !&lt;span style="color:#66d9ef"&gt;int&lt;/span&gt;.TryParse(role, &lt;span style="color:#66d9ef"&gt;out&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;var&lt;/span&gt; roleId))
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;null&lt;/span&gt;;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; claims.TryGetValue(TenantClaim, &lt;span style="color:#66d9ef"&gt;out&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;var&lt;/span&gt; tenantId);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#66d9ef"&gt;return&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;new&lt;/span&gt; MyUser(userId, roleId, tenantId ?? &lt;span style="color:#66d9ef"&gt;string&lt;/span&gt;.Empty);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; }
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Register it with the generic overload; omit the type argument to get &lt;code&gt;DefaultAuthenticatedUserMapper&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;builder.Services.AddTokenAuthentication&amp;lt;MyUserMapper&amp;gt;(options =&amp;gt; { &lt;span style="color:#75715e"&gt;/* ... */&lt;/span&gt; });
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;pre class="mermaid"&gt;flowchart LR
+User[&amp;#34;your IAuthenticatedUser&amp;#34;] -- &amp;#34;mapper.ToClaims()&amp;#34; --&amp;gt; Claims[&amp;#34;your claims&amp;#34;]
 Claims -- &amp;#34;embedded in JWT at login&amp;#34; --&amp;gt; Token[&amp;#34;Bearer token&amp;#34;]
-Token -- &amp;#34;AuthenticatedUserFactory.FromToken()&amp;#34; --&amp;gt; User2[&amp;#34;AuthenticatedUser&amp;#34;]
+Token -- &amp;#34;TokenClaimsReader.Read()&amp;#34; --&amp;gt; Claims2[&amp;#34;claims dictionary&amp;#34;]
+Claims2 -- &amp;#34;mapper.FromClaims()&amp;#34; --&amp;gt; User2[&amp;#34;your IAuthenticatedUser&amp;#34;]
 &lt;/pre&gt;
+&lt;p&gt;Because &lt;code&gt;ToClaims&lt;/code&gt; takes the interface, a mapper writing extra claims casts to its own type. The cast is
+safe: the same app owns the user type, the mapper, and the provider that produced the user.&lt;/p&gt;
 &lt;h2 id="declaring-access-rules"&gt;Declaring access rules&lt;/h2&gt;
 &lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-csharp" data-lang="csharp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[Authorize]&lt;/span&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;[RoleRequirement(1, 2)]&lt;/span&gt; &lt;span style="color:#75715e"&gt;// e.g. Admin, Manager&lt;/span&gt;
@@ -1031,7 +1074,7 @@ the request short-circuits with a 401 (&lt;code&gt;{&amp;quot;message&amp;quot;:
 &lt;code&gt;[AllowAnonymous]&lt;/code&gt; and returns immediately (no 401) if present.&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;&lt;code&gt;[RoleRequirement(params int[] authorizedRoles)]&lt;/code&gt;&lt;/strong&gt; — a &lt;code&gt;TypeFilterAttribute&lt;/code&gt; around
 &lt;code&gt;RoleRequirementFilter&lt;/code&gt;. It reads the same &lt;code&gt;HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt;; if the user is present and its
-&lt;code&gt;Role&lt;/code&gt; is one of &lt;code&gt;authorizedRoles&lt;/code&gt;, the request proceeds, otherwise it short-circuits with a 403
+&lt;code&gt;RoleId&lt;/code&gt; is one of &lt;code&gt;authorizedRoles&lt;/code&gt;, the request proceeds, otherwise it short-circuits with a 403
 (a &lt;code&gt;ProcessOutput&lt;/code&gt; with the error &lt;code&gt;&amp;quot;You do not have permission to access this resource&amp;quot;&lt;/code&gt;). It also
 honors &lt;code&gt;[AllowAnonymous]&lt;/code&gt; — an anonymous-marked action returns immediately without a role check, even
 under &lt;code&gt;[RoleRequirement(...)]&lt;/code&gt;.&lt;/li&gt;
@@ -1072,4 +1115,63 @@ revocations bounded.&lt;/p&gt;
 and wiring up &lt;code&gt;ConfigureSecurity()&lt;/code&gt;.&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;&lt;a href="https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics"&gt;Middleware &amp;amp; Diagnostics&lt;/a&gt;&lt;/strong&gt; — how &lt;code&gt;ExceptionMiddleware&lt;/code&gt; and
 &lt;code&gt;TraceActivityMiddleware&lt;/code&gt; relate to the rest of the pipeline &lt;code&gt;AuthenticationMiddleware&lt;/code&gt; runs in.&lt;/li&gt;
-&lt;/ul&gt;</content></item></channel></rss>
+&lt;/ul&gt;
+&lt;h2 id="migrating-from-2x"&gt;Migrating from 2.x&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;3.0.0&lt;/code&gt; makes the authenticated-user type and the token&amp;rsquo;s claim keys caller-defined. Where the library
+used to hard-code &lt;code&gt;AuthenticatedUser(int Id, int Role)&lt;/code&gt;, it now only knows &lt;code&gt;IAuthenticatedUser&lt;/code&gt; (&lt;code&gt;Guid Id&lt;/code&gt;, &lt;code&gt;int RoleId&lt;/code&gt;) — implement your own, or keep using the library&amp;rsquo;s &lt;code&gt;AuthenticatedUser(Guid Id, int RoleId)&lt;/code&gt;.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Before&lt;/th&gt;
+&lt;th&gt;After&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AuthenticatedUser(int Id, int Role)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;AuthenticatedUser(Guid Id, int RoleId)&lt;/code&gt;, or your own &lt;code&gt;IAuthenticatedUser&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;user.Role&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;user.RoleId&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;TokenClaimKeys.Role&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;TokenClaimKeys.RoleId&lt;/code&gt; — the claim string is still &lt;code&gt;&amp;quot;role&amp;quot;&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;GetAuthenticatedUserById(int id)&lt;/code&gt; returning &lt;code&gt;AuthenticatedUser?&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;GetAuthenticatedUserById(Guid id)&lt;/code&gt; returning &lt;code&gt;IAuthenticatedUser?&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;GetAuthenticatedUserByEmail(string email)&lt;/code&gt; returning &lt;code&gt;AuthenticatedUser?&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;same parameter, now returning &lt;code&gt;IAuthenticatedUser?&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;TokenValidationResult(AuthenticatedUser?, string?)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;TokenValidationResult(IAuthenticatedUser?, string?)&lt;/code&gt; — affects custom &lt;code&gt;ITokenValidator&lt;/code&gt; implementations&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;user.ToTokenClaims()&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;mapper.ToClaims(user)&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;AuthenticatedUserFactory.FromToken(token)&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;TokenClaimsReader.Read(token)&lt;/code&gt; then &lt;code&gt;mapper.FromClaims(claims)&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;(AuthenticatedUser?)HttpContext.Items[&amp;quot;User&amp;quot;]&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;HttpContext.GetUser&amp;lt;MyUser&amp;gt;()&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Two things to plan around before you deploy this upgrade:&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Tokens issued by 2.x are rejected after the upgrade.&lt;/strong&gt; The claim key strings are unchanged, so the
+claims still &lt;em&gt;read&lt;/em&gt; — but &lt;code&gt;DefaultAuthenticatedUserMapper&lt;/code&gt; requires the &lt;code&gt;id&lt;/code&gt; claim to parse as a &lt;code&gt;Guid&lt;/code&gt;,
+and 2.x wrote an integer there. Every unexpired access token therefore fails with a 401
+(&lt;code&gt;&amp;quot;Could not retrieve user from token&amp;quot;&lt;/code&gt;, or &lt;code&gt;&amp;quot;Could not retrieve user id from token&amp;quot;&lt;/code&gt; in &lt;code&gt;Revalidate&lt;/code&gt;
+mode). This is fail-closed and safe, but it logs every user out at the moment of deployment. Plan for
+it: drain the old tokens before switching over, accept the forced re-authentication, or ship a mapper
+that accepts both an integer and a &lt;code&gt;Guid&lt;/code&gt; in the &lt;code&gt;id&lt;/code&gt; claim for one release.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;User ids must become &lt;code&gt;Guid&lt;/code&gt;s.&lt;/strong&gt; If your store keys users by integer, this is a data migration, not
+just a compile fix.&lt;/p&gt;</content></item></channel></rss>
