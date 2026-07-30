@@ -1058,6 +1058,7 @@ Create `tests/Security/DefaultAuthenticatedUserMapperTests.cs`:
 
 ```csharp
 using ArturRios.Util.WebApi.Security.Constants;
+using ArturRios.Util.WebApi.Security.Interfaces;
 using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Records;
 
@@ -1067,7 +1068,9 @@ public class DefaultAuthenticatedUserMapperTests
 {
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
 
-    private static readonly DefaultAuthenticatedUserMapper Mapper = new();
+    // Interface-typed on purpose: IdFromClaims is a default interface member, unreachable through a
+    // concrete-typed reference, and this is how JwtTokenValidator holds the mapper in production.
+    private static readonly IAuthenticatedUserMapper Mapper = new DefaultAuthenticatedUserMapper();
 
     [Fact]
     public void ToClaims_WritesIdAndRoleId()
