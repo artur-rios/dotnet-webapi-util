@@ -1,4 +1,5 @@
 using ArturRios.Jwt;
+using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Factories;
 using ArturRios.Util.WebApi.Security.Records;
@@ -9,69 +10,73 @@ public class AuthenticatedUserFactoryTests
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
 
-    private static string CreateToken(AuthenticatedUser user)
-    {
-        var handler = new JwtHandler();
-        var configuration = new JwtConfiguration(3600, "issuer", "audience", Secret, user.ToTokenClaims());
+    private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
 
-        return handler.CreateToken(configuration);
-    }
+    private static string CreateToken(AuthenticatedUser user) => CreateToken(user.ToTokenClaims());
+
+    private static string CreateToken(Dictionary<string, string> claims) =>
+        new JwtHandler().CreateToken(new JwtConfiguration(3600, "issuer", "audience", Secret, claims));
 
     [Fact]
     public void FromToken_ShouldReconstructUser_FromIdAndRoleClaims()
     {
-        var token = CreateToken(new AuthenticatedUser("42", 3));
+        var token = CreateToken(new AuthenticatedUser(UserId, 3));
 
         var user = AuthenticatedUserFactory.FromToken(token);
 
         Assert.NotNull(user);
-        Assert.Equal("42", user.Id);
-        Assert.Equal(3, user.Role);
+        Assert.Equal(UserId, user.Id);
+        Assert.Equal(3, user.RoleId);
     }
 
     [Fact]
-    public void FromToken_ShouldReconstructUser_WhenIdIsNotNumeric()
+    public void FromToken_ShouldReturnNull_WhenIdIsNotAGuid()
     {
-        var token = CreateToken(new AuthenticatedUser("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90", 3));
+        var token = CreateToken(new Dictionary<string, string>
+        {
+            { TokenClaimKeys.Id, "42" }, { TokenClaimKeys.RoleId, "3" }
+        });
 
-        var user = AuthenticatedUserFactory.FromToken(token);
-
-        Assert.NotNull(user);
-        Assert.Equal("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90", user.Id);
+        Assert.Null(AuthenticatedUserFactory.FromToken(token));
     }
 
     [Fact]
-    public void FromToken_ShouldReturnNull_WhenIdClaimIsBlank()
+    public void FromToken_ShouldReturnNull_WhenRoleIdIsNotNumeric()
     {
-        var token = CreateToken(new AuthenticatedUser(" ", 3));
+        var token = CreateToken(new Dictionary<string, string>
+        {
+            { TokenClaimKeys.Id, UserId.ToString() }, { TokenClaimKeys.RoleId, "admin" }
+        });
 
-        var user = AuthenticatedUserFactory.FromToken(token);
-
-        Assert.Null(user);
+        Assert.Null(AuthenticatedUserFactory.FromToken(token));
     }
 
     [Fact]
     public void FromToken_ShouldReturnNull_WhenTokenIsNotReadable()
     {
-        var user = AuthenticatedUserFactory.FromToken("not-a-jwt");
-
-        Assert.Null(user);
+        Assert.Null(AuthenticatedUserFactory.FromToken("not-a-jwt"));
     }
 
     [Fact]
     public void FromToken_ShouldReturnNull_WhenTokenIsEmpty()
     {
-        var user = AuthenticatedUserFactory.FromToken(string.Empty);
-
-        Assert.Null(user);
+        Assert.Null(AuthenticatedUserFactory.FromToken(string.Empty));
     }
 
     [Fact]
-    public void IdFromToken_ShouldReturnIdClaim_AsWritten()
+    public void IdFromToken_ShouldReturnId_WhenClaimIsAGuid()
     {
-        var token = CreateToken(new AuthenticatedUser("user-42", 3));
+        var token = CreateToken(new AuthenticatedUser(UserId, 3));
 
-        Assert.Equal("user-42", AuthenticatedUserFactory.IdFromToken(token));
+        Assert.Equal(UserId, AuthenticatedUserFactory.IdFromToken(token));
+    }
+
+    [Fact]
+    public void IdFromToken_ShouldReturnNull_WhenIdIsNotAGuid()
+    {
+        var token = CreateToken(new Dictionary<string, string> { { TokenClaimKeys.Id, "42" } });
+
+        Assert.Null(AuthenticatedUserFactory.IdFromToken(token));
     }
 
     [Fact]

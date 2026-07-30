@@ -1,5 +1,6 @@
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Filters;
+using ArturRios.Util.WebApi.Security.Interfaces;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,8 +14,11 @@ public class RoleRequirementFilterTests
 {
     private const int AuthorizedRole = 1;
     private const int UnauthorizedRole = 2;
+    private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
 
-    private static AuthorizationFilterContext BuildContext(AuthenticatedUser? user, bool allowAnonymous)
+    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+    private static AuthorizationFilterContext BuildContext(IAuthenticatedUser? user, bool allowAnonymous)
     {
         var httpContext = new DefaultHttpContext();
 
@@ -61,7 +65,7 @@ public class RoleRequirementFilterTests
     [Fact]
     public void OnAuthorization_NoAllowAnonymousAndAuthorizedRole_DoesNotSetResult()
     {
-        var user = new AuthenticatedUser("1", AuthorizedRole);
+        var user = new AuthenticatedUser(UserId, AuthorizedRole);
         var context = BuildContext(user, allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
 
@@ -73,8 +77,31 @@ public class RoleRequirementFilterTests
     [Fact]
     public void OnAuthorization_NoAllowAnonymousAndUnauthorizedRole_ReturnsForbidden()
     {
-        var user = new AuthenticatedUser("1", UnauthorizedRole);
+        var user = new AuthenticatedUser(UserId, UnauthorizedRole);
         var context = BuildContext(user, allowAnonymous: false);
+        var filter = new RoleRequirementFilter(AuthorizedRole);
+
+        filter.OnAuthorization(context);
+
+        var result = Assert.IsType<ObjectResult>(context.Result);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public void OnAuthorization_CustomUserTypeWithAuthorizedRole_DoesNotSetResult()
+    {
+        var context = BuildContext(new TenantUser(UserId, AuthorizedRole, "acme"), allowAnonymous: false);
+        var filter = new RoleRequirementFilter(AuthorizedRole);
+
+        filter.OnAuthorization(context);
+
+        Assert.Null(context.Result);
+    }
+
+    [Fact]
+    public void OnAuthorization_CustomUserTypeWithUnauthorizedRole_ReturnsForbidden()
+    {
+        var context = BuildContext(new TenantUser(UserId, UnauthorizedRole, "acme"), allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
 
         filter.OnAuthorization(context);

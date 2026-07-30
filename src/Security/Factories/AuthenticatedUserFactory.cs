@@ -18,8 +18,8 @@ public static class AuthenticatedUserFactory
     /// </summary>
     /// <param name="token">The JWT to read. Its signature is not validated here.</param>
     /// <returns>
-    /// The reconstructed user, or <see langword="null"/> if the token cannot be read, has a blank
-    /// <c>id</c> claim, or is missing a numeric <c>role</c> claim.
+    /// The reconstructed user, or <see langword="null"/> if the token cannot be read or its <c>id</c> or
+    /// <c>role</c> claim is missing or unparseable.
     /// </returns>
     public static AuthenticatedUser? FromToken(string token)
     {
@@ -30,15 +30,15 @@ public static class AuthenticatedUserFactory
             return null;
         }
 
-        var id = ClaimValue(claims, TokenClaimKeys.Id);
-        var roleClaim = ClaimValue(claims, TokenClaimKeys.Role);
+        var idClaim = ClaimValue(claims, TokenClaimKeys.Id);
+        var roleClaim = ClaimValue(claims, TokenClaimKeys.RoleId);
 
-        if (string.IsNullOrWhiteSpace(id) || !int.TryParse(roleClaim, out var role))
+        if (!Guid.TryParse(idClaim, out var id) || !int.TryParse(roleClaim, out var roleId))
         {
             return null;
         }
 
-        return new AuthenticatedUser(id, role);
+        return new AuthenticatedUser(id, roleId);
     }
 
     /// <summary>
@@ -46,13 +46,13 @@ public static class AuthenticatedUserFactory
     /// user from a data store.
     /// </summary>
     /// <param name="token">The JWT to read. Its signature is not validated here.</param>
-    /// <returns>The user id, or <see langword="null"/> if the token cannot be read or its <c>id</c> claim is blank.</returns>
-    public static string? IdFromToken(string token)
+    /// <returns>The user id, or <see langword="null"/> if the token cannot be read or its <c>id</c> claim is not a <see cref="Guid"/>.</returns>
+    public static Guid? IdFromToken(string token)
     {
         var claims = ReadClaims(token);
-        var id = claims is null ? null : ClaimValue(claims, TokenClaimKeys.Id);
+        var idClaim = claims is null ? null : ClaimValue(claims, TokenClaimKeys.Id);
 
-        return string.IsNullOrWhiteSpace(id) ? null : id;
+        return Guid.TryParse(idClaim, out var id) ? id : null;
     }
 
     private static Claim[]? ReadClaims(string token) =>

@@ -40,7 +40,7 @@ public class JwtTokenValidator(JwtConfiguration jwtConfig, JwtHandler jwtHandler
         }
 
         var provider = context.RequestServices.GetRequiredService<IAuthenticationProvider>();
-        var user = provider.GetAuthenticatedUserById(userId);
+        var user = provider.GetAuthenticatedUserById(userId.Value);
 
         return new TokenValidationResult(user, user is null ? "User not found" : null);
     }

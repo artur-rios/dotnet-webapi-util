@@ -1,5 +1,4 @@
 using ArturRios.Util.WebApi.Security.Interfaces;
-using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace ArturRios.Util.WebApi.Security.Providers;
@@ -17,11 +16,11 @@ public class CachedAuthenticationProvider(
     private readonly CachedAuthenticationProviderOptions _options = options ?? new CachedAuthenticationProviderOptions();
 
     /// <inheritdoc />
-    public AuthenticatedUser? GetAuthenticatedUserById(string id)
+    public IAuthenticatedUser? GetAuthenticatedUserById(Guid id)
     {
         var key = $"{_options.CacheKeyPrefix}{id}";
 
-        if (cache.TryGetValue(key, out AuthenticatedUser? cachedUser))
+        if (cache.TryGetValue(key, out IAuthenticatedUser? cachedUser))
         {
             return cachedUser;
         }
@@ -37,11 +36,11 @@ public class CachedAuthenticationProvider(
     }
 
     /// <inheritdoc />
-    public AuthenticatedUser? GetAuthenticatedUserByEmail(string email)
+    public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email)
     {
         var key = $"{_options.EmailCacheKeyPrefix}{email}";
 
-        if (cache.TryGetValue(key, out AuthenticatedUser? cachedUser))
+        if (cache.TryGetValue(key, out IAuthenticatedUser? cachedUser))
         {
             return cachedUser;
         }
