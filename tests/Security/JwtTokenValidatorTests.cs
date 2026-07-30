@@ -14,7 +14,6 @@ namespace ArturRios.Util.WebApi.Tests.Security;
 public class JwtTokenValidatorTests
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
-    private const string TenantClaim = "tenant";
 
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
 
@@ -22,18 +21,22 @@ public class JwtTokenValidatorTests
 
     private sealed class TenantMapper : IAuthenticatedUserMapper
     {
+        private const string IdClaim = "uid";
+        private const string RoleClaim = "r";
+        private const string TenantClaim = "tenant";
+
         public Dictionary<string, string> ToClaims(IAuthenticatedUser user) =>
             new()
             {
-                { TokenClaimKeys.Id, user.Id.ToString() },
-                { TokenClaimKeys.RoleId, user.RoleId.ToString() },
+                { IdClaim, user.Id.ToString() },
+                { RoleClaim, user.RoleId.ToString() },
                 { TenantClaim, ((TenantUser)user).TenantId }
             };
 
         public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
         {
-            if (!claims.TryGetValue(TokenClaimKeys.Id, out var idClaim) || !Guid.TryParse(idClaim, out var id) ||
-                !claims.TryGetValue(TokenClaimKeys.RoleId, out var roleClaim) || !int.TryParse(roleClaim, out var roleId) ||
+            if (!claims.TryGetValue(IdClaim, out var idClaim) || !Guid.TryParse(idClaim, out var id) ||
+                !claims.TryGetValue(RoleClaim, out var roleClaim) || !int.TryParse(roleClaim, out var roleId) ||
                 !claims.TryGetValue(TenantClaim, out var tenantId))
             {
                 return null;

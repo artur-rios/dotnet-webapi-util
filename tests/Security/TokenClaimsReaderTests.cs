@@ -37,6 +37,12 @@ public class TokenClaimsReaderTests
     }
 
     [Fact]
+    public void Read_ReturnsNull_WhenTokenLooksLikeAJwtButIsMalformed()
+    {
+        Assert.Null(TokenClaimsReader.Read("aaa.bbb.ccc"));
+    }
+
+    [Fact]
     public void Read_KeepsFirstOccurrence_WhenClaimKeyIsRepeated()
     {
         var token = new JwtSecurityTokenHandler().WriteToken(

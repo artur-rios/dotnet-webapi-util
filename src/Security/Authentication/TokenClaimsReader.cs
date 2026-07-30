@@ -20,9 +20,20 @@ public static class TokenClaimsReader
             return null;
         }
 
+        JwtSecurityToken jwt;
+
+        try
+        {
+            jwt = Handler.ReadJwtToken(token);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
         var claims = new Dictionary<string, string>();
 
-        foreach (var claim in Handler.ReadJwtToken(token).Claims)
+        foreach (var claim in jwt.Claims)
         {
             claims.TryAdd(claim.Type, claim.Value);
         }

@@ -7,7 +7,6 @@ using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
-using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
 

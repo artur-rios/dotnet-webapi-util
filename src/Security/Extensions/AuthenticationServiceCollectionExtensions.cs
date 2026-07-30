@@ -45,7 +45,8 @@ public static class AuthenticationServiceCollectionExtensions
 
     /// <summary>
     /// Registers the consolidated <see cref="AuthenticationOptions"/>, the enabled token validators, and
-    /// <see cref="DefaultAuthenticatedUserMapper"/> as the claims mapper. Use
+    /// <see cref="DefaultAuthenticatedUserMapper"/> as the claims mapper, unless an
+    /// <see cref="IAuthenticatedUserMapper"/> is already registered. Use
     /// <see cref="AddTokenAuthentication{TMapper}"/> to supply your own mapper instead.
     /// </summary>
     /// <param name="services">The service collection to register into.</param>
@@ -57,10 +58,11 @@ public static class AuthenticationServiceCollectionExtensions
 
     /// <summary>
     /// Registers the consolidated <see cref="AuthenticationOptions"/>, the enabled token validators, and
-    /// <typeparamref name="TMapper"/> as the claims mapper. Validators are registered app-JWT first, Google
-    /// second, so the middleware tries them in that order. The app must separately register
-    /// <c>JwtConfiguration</c> and <c>JwtHandler</c> (for JWT) and an <see cref="IAuthenticationProvider"/>
-    /// (required for Google and for JWT <c>Revalidate</c> mode).
+    /// <typeparamref name="TMapper"/> as the claims mapper, unless an <see cref="IAuthenticatedUserMapper"/>
+    /// is already registered. Validators are registered app-JWT first, Google second, so the middleware
+    /// tries them in that order. The app must separately register <c>JwtConfiguration</c> and
+    /// <c>JwtHandler</c> (for JWT) and an <see cref="IAuthenticationProvider"/> (required for Google and
+    /// for JWT <c>Revalidate</c> mode).
     /// </summary>
     /// <typeparam name="TMapper">The mapper translating between the app's user and its token claims.</typeparam>
     /// <param name="services">The service collection to register into.</param>

@@ -5,6 +5,7 @@ using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Enums;
+using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Middleware;
@@ -32,6 +33,35 @@ public class AuthenticationMiddlewareTests
     private sealed class FakeVerifier(GoogleTokenPayload? payload) : IGoogleTokenVerifier
     {
         public Task<GoogleTokenPayload?> VerifyAsync(string token, IEnumerable<string> audiences) => Task.FromResult(payload);
+    }
+
+    private sealed record TenantUser(Guid Id, int RoleId, string TenantId) : IAuthenticatedUser;
+
+    private sealed class TenantMapper : IAuthenticatedUserMapper
+    {
+        private const string IdClaim = "uid";
+        private const string RoleClaim = "r";
+        private const string TenantClaim = "tenant";
+
+        public Dictionary<string, string> ToClaims(IAuthenticatedUser user) =>
+            new()
+            {
+                { IdClaim, user.Id.ToString() },
+                { RoleClaim, user.RoleId.ToString() },
+                { TenantClaim, ((TenantUser)user).TenantId }
+            };
+
+        public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
+        {
+            if (!claims.TryGetValue(IdClaim, out var idClaim) || !Guid.TryParse(idClaim, out var id) ||
+                !claims.TryGetValue(RoleClaim, out var roleClaim) || !int.TryParse(roleClaim, out var roleId) ||
+                !claims.TryGetValue(TenantClaim, out var tenantId))
+            {
+                return null;
+            }
+
+            return new TenantUser(id, roleId, tenantId);
+        }
     }
 
     private static SettingsProvider EmptySettings() => new(new ConfigurationBuilder().Build());
@@ -91,6 +121,22 @@ public class AuthenticationMiddlewareTests
         var user = Assert.IsType<AuthenticatedUser>(context.Items["User"]);
         Assert.Equal(UserId, user.Id);
         Assert.Equal("next", log.ToString());
+    }
+
+    [Fact]
+    public async Task Jwt_CustomMapper_AttachesCallerTypeReadableByGetUser()
+    {
+        var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
+        var mapper = new TenantMapper();
+        var token = CreateToken(mapper.ToClaims(new TenantUser(UserId, 3, "acme")));
+        var (context, log) = BuildContext(token, provider: null);
+        var validator = new JwtTokenValidator(Config(), new JwtHandler(), mapper, options);
+        var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [validator]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+        Assert.Equal("acme", context.GetUser<TenantUser>()!.TenantId);
     }
 
     [Fact]
