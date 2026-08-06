@@ -1,8 +1,9 @@
-+++
-title = 'HTTP Client'
-+++
-
-# HTTP Client
+---
+title: HTTP Client
+weight: 50
+description: >-
+  `ArturRios.Util.WebApi` gives you a thin base for typed clients that call another web API: `BaseWebApiClient` owns a shared `HttpGateway`, and...
+---
 
 `ArturRios.Util.WebApi` gives you a thin base for typed clients that call another web API:
 `BaseWebApiClient` owns a shared `HttpGateway`, and `BaseWebApiClientRoute` groups related endpoints
@@ -78,7 +79,7 @@ through the `Authentication.Valid` flag.
 ## Pairing with `TracePropagationHandler`
 
 Because the `HttpClient`-based constructor is built for `IHttpClientFactory`, you can attach
-`TracePropagationHandler` (see [Middleware & Diagnostics](/middleware-and-diagnostics/)) so every
+`TracePropagationHandler` (see [Middleware & Diagnostics](../middleware-and-diagnostics/)) so every
 outgoing call from the client carries the current request's W3C trace id:
 
 ```csharp
@@ -100,8 +101,8 @@ flowchart LR
 
 ## Where to next
 
-- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — `TracePropagationHandler` and the trace
+- **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — `TracePropagationHandler` and the trace
   id it propagates.
-- **[Security](/dotnet-webapi-util/security)** — `Credentials`, `Authentication` and the login flow this client typically
+- **[Security](../security/)** — `Credentials`, `Authentication` and the login flow this client typically
   calls into.
-- **[Responses](/dotnet-webapi-util/responses)** — the `ArturRios.Output` envelopes returned by the APIs these clients call.
+- **[Responses](../responses/)** — the `ArturRios.Output` envelopes returned by the APIs these clients call.

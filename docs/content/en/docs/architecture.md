@@ -1,8 +1,9 @@
-+++
-title = 'Architecture'
-+++
-
-# Architecture
+---
+title: Architecture
+weight: 10
+description: >-
+  This page shows how the pieces of `ArturRios.Util.WebApi` fit together: the request pipeline, the security model, the response envelope, and the design...
+---
 
 This page shows how the pieces of `ArturRios.Util.WebApi` fit together: the request pipeline, the
 security model, the response envelope, and the design principles that hold them together.
@@ -40,8 +41,8 @@ is available to everything downstream (including exception logging), `ExceptionM
 it can catch exceptions thrown by authentication or the endpoint itself, and `AuthenticationMiddleware`
 runs last of the three so only requests that pass tracing/exception setup pay for token validation.
 
-See [Middleware & Diagnostics](/middleware-and-diagnostics/) for what `TraceActivityMiddleware` and
-`ExceptionMiddleware` do in detail, and [Configuration](/configuration/) for the full `WebApiStartup`
+See [Middleware & Diagnostics](../middleware-and-diagnostics/) for what `TraceActivityMiddleware` and
+`ExceptionMiddleware` do in detail, and [Configuration](../configuration/) for the full `WebApiStartup`
 lifecycle.
 
 ## Security model
@@ -95,7 +96,7 @@ lookups of the same user within a short TTL, without any mode needing to know it
 `AuthenticationMiddleware` populates, and both honor `[AllowAnonymous]` by short-circuiting before checking
 it.
 
-See [Security](/security/) for the full authentication and authorization reference.
+See [Security](../security/) for the full authentication and authorization reference.
 
 ## Response envelopes
 
@@ -137,7 +138,7 @@ public ActionResult<DataOutput<UserDto?>> GetById(int id)
 }
 ```
 
-See [Responses](/responses/) for the full mapping reference.
+See [Responses](../responses/) for the full mapping reference.
 
 ## Design principles
 
@@ -159,11 +160,11 @@ See [Responses](/responses/) for the full mapping reference.
 
 ## Where to next
 
-- **[Configuration](/dotnet-webapi-util/configuration)** — the `WebApiStartup` lifecycle and `WebApiParameters`.
-- **[Security](/dotnet-webapi-util/security)** — JWT validation modes, caching, and role-based authorization in depth.
-- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — exception handling and distributed
+- **[Configuration](../configuration/)** — the `WebApiStartup` lifecycle and `WebApiParameters`.
+- **[Security](../security/)** — JWT validation modes, caching, and role-based authorization in depth.
+- **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — exception handling and distributed
   tracing.
-- **[HTTP Client](/dotnet-webapi-util/http-client)** — building typed clients on top of `BaseWebApiClient`.
-- **[Responses](/dotnet-webapi-util/responses)** — the full `ResponseResolver` mapping reference.
-- **[Endpoint Toggling](/dotnet-webapi-util/endpoint-toggle)** — enabling or disabling individual endpoints from code or
+- **[HTTP Client](../http-client/)** — building typed clients on top of `BaseWebApiClient`.
+- **[Responses](../responses/)** — the full `ResponseResolver` mapping reference.
+- **[Endpoint Toggling](../endpoint-toggle/)** — enabling or disabling individual endpoints from code or
   configuration.

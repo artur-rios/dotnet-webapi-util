@@ -1,8 +1,9 @@
-+++
-title = 'Responses'
-+++
-
-# Responses
+---
+title: Responses
+weight: 60
+description: >-
+  `ResponseResolver` is a static class that converts `ArturRios.Output` envelopes — `DataOutput<T>`, `ProcessOutput`, and `PaginatedOutput<T>` — into ASP.NET...
+---
 
 `ResponseResolver` is a static class that converts `ArturRios.Output` envelopes — `DataOutput<T>`,
 `ProcessOutput`, and `PaginatedOutput<T>` — into ASP.NET Core `ActionResult`s, so a controller action
@@ -80,12 +81,12 @@ return ResponseResolver.Resolve(output, statusCode: 404);
 ## Pairing with the envelopes
 
 `ResponseResolver` is the last stop for the "envelopes, not exceptions" pattern the rest of the library
-follows (see [Architecture](/architecture/)): application code builds a `ProcessOutput` or
+follows (see [Architecture](../architecture/)): application code builds a `ProcessOutput` or
 `DataOutput<T>` (`WithData`, `WithError`, etc.) to describe what happened, and `ResponseResolver` is the
 single place that decides how that maps onto the HTTP response — so success and failure both flow through
 the same, predictable shape instead of being scattered across `Ok(...)`/`BadRequest(...)`/`NotFound(...)`
 calls in every action. It pairs naturally with `AddCustomInvalidModelStateResponse()` (see
-[Configuration](/configuration/)), which shapes ASP.NET Core's own model-validation 400 as a
+[Configuration](../configuration/)), which shapes ASP.NET Core's own model-validation 400 as a
 `DataOutput<string>` so it looks identical to a `Resolve`d failure.
 
 ## Controller-action example
@@ -106,9 +107,9 @@ service's error messages, with no branching in the action itself.
 
 ## Where to next
 
-- **[Architecture](/dotnet-webapi-util/architecture)** — where `ResponseResolver` sits at the end of the request pipeline,
+- **[Architecture](../architecture/)** — where `ResponseResolver` sits at the end of the request pipeline,
   and the envelope class hierarchy (`ProcessOutput` → `DataOutput<T>` → `PaginatedOutput<T>`).
-- **[Configuration](/dotnet-webapi-util/configuration)** — `AddCustomInvalidModelStateResponse()`, which shapes validation
+- **[Configuration](../configuration/)** — `AddCustomInvalidModelStateResponse()`, which shapes validation
   failures the same way.
-- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — `ExceptionMiddleware`, which returns the
+- **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — `ExceptionMiddleware`, which returns the
   same `DataOutput<string>` shape for unhandled exceptions that never reach a `Resolve` call.

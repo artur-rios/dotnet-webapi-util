@@ -1,8 +1,9 @@
-+++
-title = 'Configuration'
-+++
-
-# Configuration
+---
+title: Configuration
+weight: 20
+description: >-
+  `WebApiStartup` is the abstract base class you derive from to bootstrap an ASP.NET Core host: configuration loading, Swagger, the middleware pipeline and the...
+---
 
 `WebApiStartup` is the abstract base class you derive from to bootstrap an ASP.NET Core host:
 configuration loading, Swagger, the middleware pipeline and the invalid-model-state response all
@@ -148,11 +149,11 @@ call.
 
 ## Where to next
 
-- **[Architecture](/dotnet-webapi-util/architecture)** — how the pipeline, security model and response envelopes fit
+- **[Architecture](../architecture/)** — how the pipeline, security model and response envelopes fit
   together.
-- **[Security](/dotnet-webapi-util/security)** — `ConfigureSecurity()`, JWT validation modes, and role-based authorization.
-- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — the built-in middlewares registered via
+- **[Security](../security/)** — `ConfigureSecurity()`, JWT validation modes, and role-based authorization.
+- **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — the built-in middlewares registered via
   `AddMiddlewares`.
-- **[Responses](/dotnet-webapi-util/responses)** — `ResponseResolver` and the invalid-model-state envelope shape.
-- **[Endpoint Toggling](/dotnet-webapi-util/endpoint-toggle)** — reading `appsettings.json`/environment values to enable or
+- **[Responses](../responses/)** — `ResponseResolver` and the invalid-model-state envelope shape.
+- **[Endpoint Toggling](../endpoint-toggle/)** — reading `appsettings.json`/environment values to enable or
   disable individual endpoints.

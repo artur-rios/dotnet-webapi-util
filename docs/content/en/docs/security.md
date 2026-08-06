@@ -1,8 +1,9 @@
-+++
-title = 'Security'
-+++
-
-# Security
+---
+title: Security
+weight: 30
+description: >-
+  `ArturRios.Util.WebApi` ships token authentication and role-based authorization as a small, composable set of pieces: `AuthenticationMiddleware` extracts and...
+---
 
 `ArturRios.Util.WebApi` ships token authentication and role-based authorization as a small, composable
 set of pieces: `AuthenticationMiddleware` extracts and validates the token and attaches the user, a pair
@@ -50,7 +51,7 @@ request, via `TokenExtractor`:
 
 ## `AuthenticationMiddleware`
 
-`AuthenticationMiddleware` runs once per request (see [Architecture](/architecture/) for where it sits in
+`AuthenticationMiddleware` runs once per request (see [Architecture](../architecture/) for where it sits in
 the pipeline). For each request it:
 
 1. Skips validation entirely for Swagger routes and for endpoints marked `[AllowAnonymous]`.
@@ -230,7 +231,7 @@ public class AccountsController : ControllerBase
 
 Because both filters read `HttpContext.Items["User"]` rather than re-validating the token themselves,
 `[Authorize]`/`[RoleRequirement]` only make sense downstream of `AuthenticationMiddleware` — see
-[Architecture](/architecture/) for how the two fit together.
+[Architecture](../architecture/) for how the two fit together.
 
 ## `Credentials` and validation
 
@@ -268,11 +269,11 @@ revocations bounded.
 
 ## Where to next
 
-- **[Architecture](/dotnet-webapi-util/architecture)** — the full token → `AuthenticationMiddleware` →
+- **[Architecture](../architecture/)** — the full token → `AuthenticationMiddleware` →
   `Items["User"]` → authorization-filter flow, alongside the rest of the pipeline.
-- **[Configuration](/dotnet-webapi-util/configuration)** — registering `AuthenticationMiddleware` via `AddMiddlewares`
+- **[Configuration](../configuration/)** — registering `AuthenticationMiddleware` via `AddMiddlewares`
   and wiring up `ConfigureSecurity()`.
-- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — how `ExceptionMiddleware` and
+- **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — how `ExceptionMiddleware` and
   `TraceActivityMiddleware` relate to the rest of the pipeline `AuthenticationMiddleware` runs in.
 
 ## Migrating from 2.x

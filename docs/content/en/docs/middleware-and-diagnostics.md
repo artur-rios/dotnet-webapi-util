@@ -1,14 +1,15 @@
-+++
-title = 'Middleware & Diagnostics'
-+++
-
-# Middleware & Diagnostics
+---
+title: Middleware & Diagnostics
+weight: 40
+description: >-
+  `ArturRios.Util.WebApi` ships two request-pipeline middlewares — `TraceActivityMiddleware` and `ExceptionMiddleware` — plus `TracePropagationHandler`, a...
+---
 
 `ArturRios.Util.WebApi` ships two request-pipeline middlewares — `TraceActivityMiddleware` and
 `ExceptionMiddleware` — plus `TracePropagationHandler`, a `DelegatingHandler` that carries the same
 trace id onto outgoing `HttpClient` calls. (The third pipeline middleware, `AuthenticationMiddleware`, is
-covered on the [Security](/security/) page.) The middlewares are registered through `AddMiddlewares`, as
-referenced in [Architecture](/architecture/) and [Configuration](/configuration/).
+covered on the [Security](../security/) page.) The middlewares are registered through `AddMiddlewares`, as
+referenced in [Architecture](../architecture/) and [Configuration](../configuration/).
 
 ## `WebApiMiddleware` and registration order
 
@@ -27,7 +28,7 @@ AddMiddlewares([
 
 `TraceActivityMiddleware` runs first so the trace id is available to everything downstream, including
 exception logging; `ExceptionMiddleware` runs next so it can catch exceptions thrown by authentication or
-the endpoint itself; `AuthenticationMiddleware` (see [Security](/security/)) runs last of the three.
+the endpoint itself; `AuthenticationMiddleware` (see [Security](../security/)) runs last of the three.
 
 ## `ExceptionMiddleware`
 
@@ -46,7 +47,7 @@ The 500 response body is a JSON `DataOutput<string>` envelope. By default its `M
 **generic** message — `"Internal server error, please try again later"` — so internal exception details
 are never leaked to the client. The one exception: if the thrown exception is a `CustomException`, its
 own `Messages` are returned instead, letting application code surface a deliberate, safe-to-show error
-through the same envelope shape `ResponseResolver` uses everywhere else (see [Responses](/responses/)).
+through the same envelope shape `ResponseResolver` uses everywhere else (see [Responses](../responses/)).
 
 The response body is serialized with `JsonConvert.SerializeObject(output)` (Newtonsoft, default casing),
 so a generic 500 looks like:
@@ -101,14 +102,14 @@ builder.Services.AddHttpClient<MyApiClient>()
     .AddHttpMessageHandler<TracePropagationHandler>();
 ```
 
-See [HTTP Client](/http-client/) for how `BaseWebApiClient` fits into that registration.
+See [HTTP Client](../http-client/) for how `BaseWebApiClient` fits into that registration.
 
 ## Where to next
 
-- **[Architecture](/dotnet-webapi-util/architecture)** — how these middlewares sit relative to `AuthenticationMiddleware` and
+- **[Architecture](../architecture/)** — how these middlewares sit relative to `AuthenticationMiddleware` and
   `ResponseResolver` in the full pipeline.
-- **[Configuration](/dotnet-webapi-util/configuration)** — registering middlewares via `AddMiddlewares` as part of
+- **[Configuration](../configuration/)** — registering middlewares via `AddMiddlewares` as part of
   `WebApiStartup`.
-- **[HTTP Client](/dotnet-webapi-util/http-client)** — pairing `TracePropagationHandler` with `BaseWebApiClient`.
-- **[Responses](/dotnet-webapi-util/responses)** — the `DataOutput<T>`/`ProcessOutput` envelopes `ExceptionMiddleware` and
+- **[HTTP Client](../http-client/)** — pairing `TracePropagationHandler` with `BaseWebApiClient`.
+- **[Responses](../responses/)** — the `DataOutput<T>`/`ProcessOutput` envelopes `ExceptionMiddleware` and
   `ResponseResolver` both use.

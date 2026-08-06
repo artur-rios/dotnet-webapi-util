@@ -1,8 +1,9 @@
-+++
-title = 'Endpoint Toggling'
-+++
-
-# Endpoint Toggling
+---
+title: Endpoint Toggling
+weight: 30
+description: >-
+  `[EndpointToggle]` is an action filter attribute that turns a single endpoint on or off. When the endpoint is disabled, the request is short-circuited **before...
+---
 
 `[EndpointToggle]` is an action filter attribute that turns a single endpoint on or off. When the endpoint
 is disabled, the request is short-circuited **before the action runs** and a response is returned in one of
@@ -96,7 +97,7 @@ When an endpoint is disabled, `disabledOutputType` (an `OutputType`) decides wha
 | `Void` | Empty result, no body. | `disabledStatusCode` (default `404`) |
 | `Default` | The action's default return value — `default(T)` for value types, `null` for reference types, or an empty result for `void`. | `disabledStatusCode` (default `404`) |
 | `Object` *(default)* | A `ProcessOutput` envelope carrying `disabledMessage`. | `disabledStatusCode` (default `404`) |
-| `Exception` | Throws `EndpointDisabledException`, handled by the exception pipeline (e.g. [`ExceptionMiddleware`](/middleware-and-diagnostics/)). | Decided by the exception handler |
+| `Exception` | Throws `EndpointDisabledException`, handled by the exception pipeline (e.g. [`ExceptionMiddleware`](../middleware-and-diagnostics/)). | Decided by the exception handler |
 
 A few details worth knowing:
 
@@ -119,8 +120,8 @@ public IActionResult Export() { /* ... */ }
 
 ## Where to next
 
-- **[Configuration](/dotnet-webapi-util/configuration)** — how `appsettings.json` and environment values are loaded into
+- **[Configuration](../configuration/)** — how `appsettings.json` and environment values are loaded into
   the host that `[EndpointToggle]` reads from.
-- **[Middleware & Diagnostics](/dotnet-webapi-util/middleware-and-diagnostics)** — `ExceptionMiddleware`, which handles the
+- **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — `ExceptionMiddleware`, which handles the
   `EndpointDisabledException` thrown by the `Exception` output type.
-- **[Responses](/dotnet-webapi-util/responses)** — the `ProcessOutput` envelope used by the `Object` output type.
+- **[Responses](../responses/)** — the `ProcessOutput` envelope used by the `Object` output type.
