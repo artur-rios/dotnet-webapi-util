@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ArturRios.Util.WebApi</PackageId>
-    <Version>3.1.0</Version>
+    <Version>3.2.0</Version>
     <Authors>Artur Rios</Authors>
     <Company>Artur Rios</Company>
     <Description>Utilities for developing web API's in .NET</Description>
@@ -22,7 +22,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ArturRios.Configuration" Version="1.0.0" />
-    <PackageReference Include="ArturRios.Jwt" Version="1.0.0" />
+    <PackageReference Include="ArturRios.Jwt" Version="1.1.0" />
     <PackageReference Include="ArturRios.Util" Version="1.5.0" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />

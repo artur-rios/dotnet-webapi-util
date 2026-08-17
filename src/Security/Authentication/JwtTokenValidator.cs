@@ -11,7 +11,7 @@ namespace ArturRios.Util.WebApi.Security.Authentication;
 /// <summary>Validates the app's own HMAC-signed JWT and resolves the user through the registered
 /// <see cref="IAuthenticatedUserMapper"/> — from claims alone or by an <see cref="IAuthenticationProvider"/>
 /// lookup, per <see cref="AuthenticationOptions.JwtMode"/>.</summary>
-/// <param name="jwtConfig">Provides the signing secret used to validate the token.</param>
+/// <param name="jwtConfig">Provides the key material used to validate the token.</param>
 /// <param name="jwtHandler">Validates token signatures.</param>
 /// <param name="mapper">Interprets the token's claims as the app's user.</param>
 /// <param name="options">Controls how the user is resolved once the signature is valid.</param>
@@ -24,7 +24,14 @@ public class JwtTokenValidator(
     /// <inheritdoc />
     public async Task<TokenValidationResult> ValidateAsync(string token, HttpContext context)
     {
-        var isValid = await jwtHandler.IsTokenValidAsync(token, jwtConfig.Secret);
+        // Every configured key when there are any, so a token signed with a key that is no longer
+        // the signing key stays valid until it is withdrawn — which is what makes replacing a signing
+        // secret a rotation rather than a cutover that invalidates every token in flight. Falls back
+        // to the single secret when no keys are configured, which is what every configuration written
+        // before ArturRios.Jwt 1.1.0 looks like.
+        var isValid = jwtConfig.Keys.Count > 0
+            ? await jwtHandler.IsTokenValidAsync(token, jwtConfig.Keys)
+            : await jwtHandler.IsTokenValidAsync(token, jwtConfig.Secret);
 
         if (!isValid)
         {

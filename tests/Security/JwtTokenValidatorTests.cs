@@ -225,4 +225,91 @@ public class JwtTokenValidatorTests
         Assert.Null(result.User);
         Assert.Equal("User not found", result.Error);
     }
+
+    // Key rotation (ArturRios.Jwt 1.1.0). A configuration carrying Keys validates against all of
+    // them, so a token signed with a key that is no longer the signing key survives until that key is
+    // withdrawn — the difference between rotating a signing secret and cutting over to a new one.
+
+    private const string PreviousSecret = "the-previous-signing-key-with-enough-length-1234567890";
+
+    private static readonly JwtKey PreviousKey = new("k1", PreviousSecret);
+    private static readonly JwtKey CurrentKey = new("k2", Secret);
+
+    private static JwtConfiguration RotatingConfig(params JwtKey[] keys) =>
+        Config() with { Keys = keys, SigningKeyId = keys.LastOrDefault()?.Id };
+
+    private static string CreateToken(JwtConfiguration configuration, Dictionary<string, string> claims) =>
+        new JwtHandler().CreateToken(configuration with { Claims = claims });
+
+    private static JwtTokenValidator Validator(JwtConfiguration configuration) =>
+        new(configuration, new JwtHandler(), new DefaultAuthenticatedUserMapper(),
+            new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly });
+
+    [Fact]
+    public async Task Keys_AcceptsTokenSignedWithTheCurrentKey()
+    {
+        var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
+        var configuration = RotatingConfig(PreviousKey, CurrentKey);
+        var token = CreateToken(configuration, claims);
+
+        var result = await Validator(configuration).ValidateAsync(token, ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+        Assert.Equal(UserId, result.User!.Id);
+    }
+
+    [Fact]
+    public async Task Keys_AcceptsTokenSignedWithARetiredButStillAcceptedKey()
+    {
+        // The point of the feature: this token was issued before the rotation, and its holder must
+        // not be signed out by it.
+        var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
+        var issuedBefore = CreateToken(RotatingConfig(PreviousKey), claims);
+
+        var result = await Validator(RotatingConfig(PreviousKey, CurrentKey))
+            .ValidateAsync(issuedBefore, ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+    }
+
+    [Fact]
+    public async Task Keys_RejectsTokenSignedWithAWithdrawnKey()
+    {
+        // And the half that matters when a key has leaked rather than merely aged.
+        var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
+        var issuedBefore = CreateToken(RotatingConfig(PreviousKey), claims);
+
+        var result = await Validator(RotatingConfig(CurrentKey))
+            .ValidateAsync(issuedBefore, ContextWithProvider(null));
+
+        Assert.Null(result.User);
+        Assert.Equal("Invalid token", result.Error);
+    }
+
+    [Fact]
+    public async Task Keys_AcceptsTokenIssuedBeforeRotationWasConfigured()
+    {
+        // No kid, because it was signed by a configuration that had no Keys. Adopting rotation must
+        // not invalidate what was issued before it.
+        var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
+        var legacyToken = CreateToken(claims);
+
+        var result = await Validator(RotatingConfig(PreviousKey, CurrentKey))
+            .ValidateAsync(legacyToken, ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+    }
+
+    [Fact]
+    public async Task NoKeys_StillValidatesAgainstTheSingleSecret()
+    {
+        // The fallback every configuration written before this took. It has its own test because the
+        // branch that chooses it is the one thing standing between those consumers and a break.
+        var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
+        var token = CreateToken(claims);
+
+        var result = await Validator(JwtValidationMode.ClaimsOnly).ValidateAsync(token, ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+    }
 }

@@ -78,6 +78,25 @@ then resolved is controlled by `AuthenticationOptions.JwtMode`:
   role-changed user is rejected or updated on the very next request — at the cost of one lookup per
   request. An `IAuthenticationProvider` **must** be registered for this mode.
 
+## Rotating the signing key
+
+`JwtTokenValidator` checks the token against every key in `JwtConfiguration.Keys` when the
+configuration carries any, and against `JwtConfiguration.Secret` when it does not. That is what lets a
+signing key be replaced without invalidating the tokens already issued: the retired key stays in
+`Keys` until no token it signed can still be alive, and only then is it withdrawn.
+
+```csharp
+services.AddSingleton(new JwtConfiguration(3600, "my-api", "my-app", string.Empty, [])
+{
+    Keys = [new JwtKey("2026-08", previousSecret), new JwtKey("2026-09", currentSecret)],
+    SigningKeyId = "2026-09"
+});
+```
+
+Nothing else changes: `AuthenticationOptions` is untouched, and a configuration with no `Keys` behaves
+exactly as it did before. See the [ArturRios.Jwt docs](https://artur-rios.github.io/dotnet-jwt/) for
+the rotation procedure and for how the `kid` header selects a key.
+
 ## Google authentication
 
 When `EnableGoogle` is `true`, `GoogleTokenValidator` verifies the token via `IGoogleTokenVerifier` — by

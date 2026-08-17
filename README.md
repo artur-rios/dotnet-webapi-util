@@ -116,6 +116,11 @@ For the app JWT, how the user is resolved is controlled by `AuthenticationOption
   `IAuthenticatedUserMapper` to decide what your tokens carry; read it back with
   `HttpContext.GetUser<MyUser>()`. See [Security](https://artur-rios.github.io/dotnet-webapi-util/security/).
 
+Signing keys can be rotated: give `JwtConfiguration` a set of `Keys` and name the one that signs with
+`SigningKeyId`, and a token signed with a key that has since been retired stays valid until that key is
+withdrawn. A configuration with no `Keys` validates against `Secret` exactly as before. See
+[Security](https://artur-rios.github.io/dotnet-webapi-util/security/).
+
 A Google ID token is always resolved by looking up the token's verified email through
 `IAuthenticationProvider.GetAuthenticatedUserByEmail`, so an `IAuthenticationProvider` is **required**
 whenever `EnableGoogle` is `true`, as it is for JWT `Revalidate` mode. To accept Google sign-in:
