@@ -5,6 +5,7 @@ using ArturRios.Util.WebApi.Security.Authentication;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class TokenClaimsReaderTests
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
@@ -13,7 +14,7 @@ public class TokenClaimsReaderTests
         new JwtHandler().CreateToken(new JwtConfiguration(3600, "issuer", "audience", Secret, claims));
 
     [Fact]
-    public void Read_ReturnsClaims_FromReadableToken()
+    public void GivenAReadableToken_WhenReadingItsClaims_ThenTheyComeBack()
     {
         var token = CreateToken(new Dictionary<string, string> { { "id", "abc" }, { "tenant", "acme" } });
 
@@ -25,25 +26,25 @@ public class TokenClaimsReaderTests
     }
 
     [Fact]
-    public void Read_ReturnsNull_WhenTokenIsNotReadable()
+    public void GivenATokenThatCannotBeRead_WhenReadingItsClaims_ThenNullComesBack()
     {
         Assert.Null(TokenClaimsReader.Read("not-a-jwt"));
     }
 
     [Fact]
-    public void Read_ReturnsNull_WhenTokenIsEmpty()
+    public void GivenAnEmptyToken_WhenReadingItsClaims_ThenNullComesBack()
     {
         Assert.Null(TokenClaimsReader.Read(string.Empty));
     }
 
     [Fact]
-    public void Read_ReturnsNull_WhenTokenLooksLikeAJwtButIsMalformed()
+    public void GivenATokenShapedLikeAJwtButMalformed_WhenReadingItsClaims_ThenNullComesBack()
     {
         Assert.Null(TokenClaimsReader.Read("aaa.bbb.ccc"));
     }
 
     [Fact]
-    public void Read_KeepsFirstOccurrence_WhenClaimKeyIsRepeated()
+    public void GivenARepeatedClaimKey_WhenReadingTheClaims_ThenTheFirstOccurrenceIsKept()
     {
         var token = new JwtSecurityTokenHandler().WriteToken(
             new JwtSecurityToken(claims: [new Claim("dup", "first"), new Claim("dup", "second")]));

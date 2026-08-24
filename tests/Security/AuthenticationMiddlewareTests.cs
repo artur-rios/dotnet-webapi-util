@@ -16,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class AuthenticationMiddlewareTests
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
@@ -109,7 +110,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task Jwt_ClaimsOnly_SetsUserAndCallsNext()
+    public async Task GivenAValidJwtInClaimsOnlyMode_WhenAuthenticating_ThenTheUserIsAttachedAndTheRequestContinues()
     {
         var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
         var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
@@ -124,7 +125,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task Jwt_CustomMapper_AttachesCallerTypeReadableByGetUser()
+    public async Task GivenACustomMapper_WhenAuthenticating_ThenTheCallersOwnUserTypeIsAttachedAndReadable()
     {
         var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly };
         var mapper = new TenantMapper();
@@ -140,7 +141,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task NoValidTokenReturns401()
+    public async Task GivenNoValidToken_WhenAuthenticating_ThenUnauthorizedIsReturned()
     {
         var options = new AuthenticationOptions();
         var (context, log) = BuildContext("not-a-token", provider: null);
@@ -154,7 +155,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task CookieSource_ReadsTokenFromCookie()
+    public async Task GivenTheCookieTokenSource_WhenAuthenticating_ThenTheTokenIsReadFromTheCookie()
     {
         var options = new AuthenticationOptions { Source = TokenSource.Cookie, CookieName = "access_token" };
         var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(UserId, 1)));
@@ -168,7 +169,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task BothEnabled_AcceptsGoogleToken_WhenNotAJwt()
+    public async Task GivenBothValidatorsEnabled_WhenTheTokenIsAGoogleOne_ThenItIsAccepted()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
         var provider = new StubProvider(byEmail: new AuthenticatedUser(OtherId, 2));
@@ -184,7 +185,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task BothEnabled_AcceptsAppJwt()
+    public async Task GivenBothValidatorsEnabled_WhenTheTokenIsTheAppsOwnJwt_ThenItIsAccepted()
     {
         var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "cid" } };
         var token = CreateToken(Mapper.ToClaims(new AuthenticatedUser(OtherId, 1)));
@@ -199,7 +200,7 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task AllowAnonymousEndpoint_SkipsValidation()
+    public async Task GivenAnAnonymousEndpoint_WhenAuthenticating_ThenValidationIsSkipped()
     {
         var options = new AuthenticationOptions();
         var (context, log) = BuildContext(headerToken: null, provider: null);

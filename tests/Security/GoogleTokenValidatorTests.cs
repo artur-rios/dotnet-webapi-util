@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class GoogleTokenValidatorTests
 {
     private static readonly Guid UserId = Guid.Parse("7b644d0a-9f11-4c5d-8e6a-4b903f2a9c1e");
@@ -29,7 +30,7 @@ public class GoogleTokenValidatorTests
         new() { EnableGoogle = true, GoogleClientIds = { "client-id-1" } };
 
     [Fact]
-    public async Task ValidToken_ResolvesUserByEmail()
+    public async Task GivenAValidGoogleToken_WhenValidating_ThenTheUserIsResolvedByEmail()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("user@example.com", "google-sub-1", true));
         var provider = new StubProvider(new AuthenticatedUser(UserId, 2));
@@ -42,7 +43,7 @@ public class GoogleTokenValidatorTests
     }
 
     [Fact]
-    public async Task ValidToken_UnknownEmail_ReturnsUserNotFound()
+    public async Task GivenAValidGoogleTokenForAnUnknownEmail_WhenValidating_ThenUserNotFoundIsReported()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("nobody@example.com", "google-sub-2", true));
         var validator = new GoogleTokenValidator(verifier, Options());
@@ -54,7 +55,7 @@ public class GoogleTokenValidatorTests
     }
 
     [Fact]
-    public async Task RejectedToken_ReturnsError()
+    public async Task GivenATokenTheVerifierRejects_WhenValidating_ThenAnErrorIsReported()
     {
         var verifier = new FakeVerifier(payload: null); // verifier rejected audience/issuer/expiry/signature
         var validator = new GoogleTokenValidator(verifier, Options());
@@ -66,7 +67,7 @@ public class GoogleTokenValidatorTests
     }
 
     [Fact]
-    public async Task ValidToken_UnverifiedEmail_RejectsBeforeUserLookup()
+    public async Task GivenAnUnverifiedEmail_WhenValidating_ThenItIsRejectedBeforeAnyUserLookup()
     {
         var verifier = new FakeVerifier(new GoogleTokenPayload("user@example.com", "google-sub-3", false));
         var provider = new StubProvider(new AuthenticatedUser(UserId, 2)); // would resolve a user if lookup were reached

@@ -19,6 +19,11 @@ namespace ArturRios.Util.WebApi.EndpointToggle;
 /// resolves the toggle on each request from <c>appsettings.json</c> and/or environment variables, so an endpoint can be
 /// turned on or off without redeploying.
 /// </remarks>
+/// <remarks>
+/// ASP.NET Core reuses a single filter-attribute instance for every request to the action it decorates, so
+/// nothing per-request is kept on the instance: the executing context is threaded through the helpers
+/// instead. Keeping it in a field let two concurrent requests overwrite each other's.
+/// </remarks>
 [AttributeUsage(AttributeTargets.Method)]
 public class EndpointToggleAttribute : ActionFilterAttribute
 {
@@ -34,8 +39,6 @@ public class EndpointToggleAttribute : ActionFilterAttribute
     private readonly string _keySeparator = string.Empty;
     private readonly string _keySuffix = string.Empty;
     private readonly bool _useConfigurationFile;
-
-    private ActionExecutingContext _context = null!;
 
     /// <summary>Creates a toggle whose enabled state is fixed at compile time.</summary>
     /// <param name="isEnabled">Whether the endpoint is enabled. When <c>false</c> the action is short-circuited on every request.</param>
@@ -108,9 +111,9 @@ public class EndpointToggleAttribute : ActionFilterAttribute
     /// <exception cref="EndpointDisabledException">Thrown when the endpoint is disabled and its disabled output type is <see cref="OutputType.Exception"/>.</exception>
     public override void OnActionExecuting(ActionExecutingContext context)
     {
-        _context = context;
+        ArgumentNullException.ThrowIfNull(context);
 
-        var isEnabled = _useConfigurationFile ? GetToggleFromFile() : _isEnabled;
+        var isEnabled = _useConfigurationFile ? GetToggleFromFile(context) : _isEnabled;
 
         if (isEnabled)
         {
@@ -120,52 +123,50 @@ public class EndpointToggleAttribute : ActionFilterAttribute
         switch (_disabledOutputType)
         {
             case OutputType.Void:
-                _context.Result = new StatusCodeResult((int)_disabledStatusCode);
+                context.Result = new StatusCodeResult((int)_disabledStatusCode);
                 break;
             case OutputType.Default:
-                ReturnDefault();
+            case OutputType.Primitive:
+                ReturnDefault(context);
                 break;
             case OutputType.Object:
-                ReturnObject();
+                ReturnObject(context);
                 break;
             case OutputType.Exception:
-                throw new EndpointDisabledException([DefaultDisabledMessage]);
-            case OutputType.Primitive:
-                ReturnDefault();
-                break;
+                throw new EndpointDisabledException([_disabledMessage]);
             default:
-                ReturnObject();
+                ReturnObject(context);
                 break;
         }
     }
 
-    private void ReturnObject()
+    private void ReturnObject(ActionExecutingContext context)
     {
         var output = ProcessOutput.New.WithMessage(_disabledMessage);
 
-        _context.Result = new ObjectResult(output) { StatusCode = (int)_disabledStatusCode };
+        context.Result = new ObjectResult(output) { StatusCode = (int)_disabledStatusCode };
     }
 
-    private void ReturnDefault()
+    private void ReturnDefault(ActionExecutingContext context)
     {
-        var methodInfo = (_context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
+        var methodInfo = (context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
         var returnType = methodInfo?.ReturnType;
 
         if (returnType == null || returnType == typeof(void))
         {
-            _context.Result = new StatusCodeResult((int)_disabledStatusCode);
+            context.Result = new StatusCodeResult((int)_disabledStatusCode);
 
             return;
         }
 
         var defaultObj = returnType.IsValueType ? Activator.CreateInstance(returnType) : null;
 
-        _context.Result = new ObjectResult(defaultObj) { StatusCode = (int)_disabledStatusCode };
+        context.Result = new ObjectResult(defaultObj) { StatusCode = (int)_disabledStatusCode };
     }
 
-    private bool GetToggleFromFile()
+    private bool GetToggleFromFile(ActionExecutingContext context)
     {
-        var toggleKey = string.IsNullOrWhiteSpace(_key) ? GetDefaultKey() : _key;
+        var toggleKey = string.IsNullOrWhiteSpace(_key) ? GetDefaultKey(context) : _key;
 
         if (string.IsNullOrWhiteSpace(toggleKey))
         {
@@ -174,17 +175,17 @@ public class EndpointToggleAttribute : ActionFilterAttribute
 
         return _configurationSource switch
         {
-            ConfigurationSourceType.AppSettings => GetToggleFromAppSettings(toggleKey) ?? true,
+            ConfigurationSourceType.AppSettings => GetToggleFromAppSettings(context, toggleKey) ?? true,
             ConfigurationSourceType.EnvFile or ConfigurationSourceType.EnvironmentVariables =>
                 GetToggleFromEnvironmentVariables(toggleKey) ?? true,
-            _ => GetToggleFromAppSettings(toggleKey) ??
+            _ => GetToggleFromAppSettings(context, toggleKey) ??
                  GetToggleFromEnvironmentVariables(toggleKey) ?? true
         };
     }
 
-    private bool? GetToggleFromAppSettings(string key)
+    private static bool? GetToggleFromAppSettings(ActionExecutingContext context, string key)
     {
-        if (_context.HttpContext.RequestServices.GetService(typeof(IConfiguration)) is not IConfiguration config)
+        if (context.HttpContext.RequestServices.GetService(typeof(IConfiguration)) is not IConfiguration config)
         {
             return null;
         }
@@ -216,34 +217,31 @@ public class EndpointToggleAttribute : ActionFilterAttribute
         return null;
     }
 
-    private string? GetDefaultKey()
+    private string? GetDefaultKey(ActionExecutingContext context)
     {
-        var methodInfo = (_context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
+        var methodInfo = (context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
         var methodName = methodInfo?.Name;
 
-        var keyPrefix = GetKeyPrefix(_key);
+        var keyPrefix = GetKeyPrefix(context, _key);
 
         return methodInfo is not null ? AddKeySuffix($"{keyPrefix}{_keySeparator}{methodName}") : null;
     }
 
-    private string? GetControllerName()
-    {
-        var controllerActionDescriptor = _context.ActionDescriptor as ControllerActionDescriptor;
-        return controllerActionDescriptor?.ControllerName;
-    }
+    private static string? GetControllerName(ActionExecutingContext context) =>
+        (context.ActionDescriptor as ControllerActionDescriptor)?.ControllerName;
 
-    private string GetKeyPrefix(string key)
+    private string GetKeyPrefix(ActionExecutingContext context, string key)
     {
         if (string.IsNullOrWhiteSpace(_keyPrefix))
         {
             return key;
         }
 
-        var controllerName = GetControllerName();
+        var controllerName = GetControllerName(context);
 
         return controllerName is null
             ? _keyPrefix.Replace($"{_keySeparator}[Controller]", string.Empty)
-            : _keyPrefix.Replace("[Controller]", GetControllerName());
+            : _keyPrefix.Replace("[Controller]", controllerName);
     }
 
     private string AddKeySuffix(string key) =>

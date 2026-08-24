@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Routing;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class RoleRequirementFilterTests
 {
     private const int AuthorizedRole = 1;
@@ -40,7 +41,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void OnAuthorization_AllowAnonymousAndNullUser_DoesNotSetResult()
+    public void GivenAnAnonymousEndpointAndNoUser_WhenCheckingTheRole_ThenTheRequestIsAllowedThrough()
     {
         var context = BuildContext(null, allowAnonymous: true);
         var filter = new RoleRequirementFilter(AuthorizedRole);
@@ -51,7 +52,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void OnAuthorization_NoAllowAnonymousAndNullUser_ReturnsForbidden()
+    public void GivenAProtectedEndpointAndNoUser_WhenCheckingTheRole_ThenForbiddenIsReturned()
     {
         var context = BuildContext(null, allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
@@ -63,7 +64,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void OnAuthorization_NoAllowAnonymousAndAuthorizedRole_DoesNotSetResult()
+    public void GivenAUserInAnAuthorizedRole_WhenCheckingTheRole_ThenTheRequestIsAllowedThrough()
     {
         var user = new AuthenticatedUser(UserId, AuthorizedRole);
         var context = BuildContext(user, allowAnonymous: false);
@@ -75,7 +76,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void OnAuthorization_NoAllowAnonymousAndUnauthorizedRole_ReturnsForbidden()
+    public void GivenAUserInAnUnauthorizedRole_WhenCheckingTheRole_ThenForbiddenIsReturned()
     {
         var user = new AuthenticatedUser(UserId, UnauthorizedRole);
         var context = BuildContext(user, allowAnonymous: false);
@@ -88,7 +89,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void OnAuthorization_CustomUserTypeWithAuthorizedRole_DoesNotSetResult()
+    public void GivenACustomUserTypeInAnAuthorizedRole_WhenCheckingTheRole_ThenTheRequestIsAllowedThrough()
     {
         var context = BuildContext(new TenantUser(UserId, AuthorizedRole, "acme"), allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
@@ -99,7 +100,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void OnAuthorization_CustomUserTypeWithUnauthorizedRole_ReturnsForbidden()
+    public void GivenACustomUserTypeInAnUnauthorizedRole_WhenCheckingTheRole_ThenForbiddenIsReturned()
     {
         var context = BuildContext(new TenantUser(UserId, UnauthorizedRole, "acme"), allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);

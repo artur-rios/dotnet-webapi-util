@@ -3,6 +3,7 @@ using ArturRios.Util.WebApi.Security.Validation;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class CredentialsValidatorTests
 {
     private readonly CredentialsValidator _validator = new();
@@ -12,7 +13,7 @@ public class CredentialsValidatorTests
     [InlineData("not-an-email", "password123", false)]
     [InlineData("user@example.com", "short", false)]
     [InlineData("", "password123", false)]
-    public void Validates(string email, string password, bool expected)
+    public void GivenCredentials_WhenValidated_ThenEachRuleIsEnforced(string email, string password, bool expected)
     {
         var result = _validator.Validate(new Credentials(email, password));
         Assert.Equal(expected, result.IsValid);

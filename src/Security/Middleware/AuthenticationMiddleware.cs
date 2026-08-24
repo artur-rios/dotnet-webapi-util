@@ -1,4 +1,4 @@
-using ArturRios.Configuration.Providers;
+﻿using ArturRios.Configuration.Providers;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Middleware;
@@ -8,7 +8,7 @@ using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.Http;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace ArturRios.Util.WebApi.Security.Middleware;
 
@@ -82,7 +82,7 @@ public class AuthenticationMiddleware(
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.ContentType = "application/json";
 
-        var payload = JsonConvert.SerializeObject(output);
+        var payload = JsonSerializer.Serialize(output);
 
         await context.Response.WriteAsync(payload);
     }

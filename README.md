@@ -11,8 +11,7 @@ authorization, cross-cutting middleware for exceptions and distributed tracing, 
 base for calling other services, and a resolver that turns `ArturRios.Output` envelopes into
 `ActionResult`s.
 
-## Install
-
+## Installation
 ```bash
 dotnet add package ArturRios.Util.WebApi
 ```
@@ -23,14 +22,14 @@ Requires **.NET 10**.
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/configuration/) |
-| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/security/) |
-| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/middleware-and-diagnostics/) |
-| HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/http-client/) |
-| Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/responses/) |
-| Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint toggling](https://artur-rios.github.io/dotnet-webapi-util/endpoint-toggle/) |
+| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/docs/configuration/) |
+| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/) |
+| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/docs/middleware-and-diagnostics/) |
+| HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/docs/http-client/) |
+| Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/docs/responses/) |
+| Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint toggling](https://artur-rios.github.io/dotnet-webapi-util/docs/endpoint-toggle/) |
 
-See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/architecture/)** for how these pieces fit together.
+See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/docs/architecture/)** for how these pieces fit together.
 
 ## Quick start
 
@@ -114,12 +113,12 @@ For the app JWT, how the user is resolved is controlled by `AuthenticationOption
   rejected immediately, at the cost of one lookup per request.
 - **Your own identity** — implement `IAuthenticatedUser` (`Guid Id`, `int RoleId`) on your own type and an
   `IAuthenticatedUserMapper` to decide what your tokens carry; read it back with
-  `HttpContext.GetUser<MyUser>()`. See [Security](https://artur-rios.github.io/dotnet-webapi-util/security/).
+  `HttpContext.GetUser<MyUser>()`. See [Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/).
 
 Signing keys can be rotated: give `JwtConfiguration` a set of `Keys` and name the one that signs with
 `SigningKeyId`, and a token signed with a key that has since been retired stays valid until that key is
 withdrawn. A configuration with no `Keys` validates against `Secret` exactly as before. See
-[Security](https://artur-rios.github.io/dotnet-webapi-util/security/).
+[Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/).
 
 A Google ID token is always resolved by looking up the token's verified email through
 `IAuthenticationProvider.GetAuthenticatedUserByEmail`, so an `IAuthenticationProvider` is **required**
@@ -267,6 +266,20 @@ exception pipeline handles. The status code defaults to `404 Not Found` and can 
 ## Documentation
 
 Full documentation, including architecture diagrams: **<https://artur-rios.github.io/dotnet-webapi-util>**
+
+## Testing
+
+The test suite is xUnit, and every test is named with the Given / When / Then pattern. Every test class
+carries a `Category` trait, so the two kinds can be run — and reported — separately:
+
+```bash
+dotnet test src/ArturRios.Util.WebApi.sln --filter "Category=Unit"
+dotnet test src/ArturRios.Util.WebApi.sln --filter "Category=Functional"
+```
+
+Unit tests exercise the code in isolation against test doubles.
+Functional tests run the trace, exception and authentication middlewares together in a real ASP.NET Core host and drive real HTTP requests through it.
+CI runs the two as separate jobs, and both must pass before a pull request can be merged.
 
 ## Versioning
 

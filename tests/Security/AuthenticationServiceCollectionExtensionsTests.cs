@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class AuthenticationServiceCollectionExtensionsTests
 {
     private sealed class FakeAuthenticationProvider : IAuthenticationProvider
@@ -23,7 +24,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddCachedAuthenticationProvider_ResolvesDecoratedProvider()
+    public void GivenTheCachingDecoratorIsRegistered_WhenResolvingTheProvider_ThenTheDecoratedOneComesBack()
     {
         var services = new ServiceCollection();
 
@@ -42,7 +43,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddTokenAuthentication_Throws_WhenNoSchemeEnabled()
+    public void GivenNoSchemeIsEnabled_WhenAddingTokenAuthentication_ThenRegistrationFails()
     {
         var services = new ServiceCollection();
         Assert.Throws<ArgumentException>(() =>
@@ -50,7 +51,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddTokenAuthentication_Throws_WhenGoogleEnabledWithoutClientIds()
+    public void GivenGoogleIsEnabledWithoutClientIds_WhenAddingTokenAuthentication_ThenRegistrationFails()
     {
         var services = new ServiceCollection();
         Assert.Throws<ArgumentException>(() =>
@@ -58,7 +59,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddTokenAuthentication_RegistersJwtValidator_ByDefault()
+    public void GivenDefaultOptions_WhenAddingTokenAuthentication_ThenTheJwtValidatorIsRegistered()
     {
         // JwtTokenValidator needs JwtConfiguration/JwtHandler, which this test does not register, so we assert
         // on the ServiceDescriptor registrations/order rather than resolving instances (per task brief guidance).
@@ -71,7 +72,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddTokenAuthentication_RegistersBothValidators_JwtFirst_WhenGoogleEnabled()
+    public void GivenGoogleIsEnabled_WhenAddingTokenAuthentication_ThenBothValidatorsAreRegisteredWithTheJwtOneFirst()
     {
         var services = new ServiceCollection();
         services.AddTokenAuthentication(o => { o.EnableGoogle = true; o.GoogleClientIds.Add("cid"); });
@@ -83,7 +84,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddTokenAuthentication_RegistersDefaultMapper_WhenNoneSpecified()
+    public void GivenNoMapperIsSpecified_WhenAddingTokenAuthentication_ThenTheDefaultMapperIsRegistered()
     {
         var services = new ServiceCollection();
         services.AddTokenAuthentication(_ => { });
@@ -93,7 +94,7 @@ public class AuthenticationServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddTokenAuthentication_RegistersGivenMapper_WhenSpecified()
+    public void GivenAMapperIsSpecified_WhenAddingTokenAuthentication_ThenThatMapperIsRegistered()
     {
         var services = new ServiceCollection();
         services.AddTokenAuthentication<StubMapper>(_ => { });

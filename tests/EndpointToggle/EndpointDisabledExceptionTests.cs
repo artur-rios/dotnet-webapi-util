@@ -3,6 +3,7 @@ using ArturRios.Util.WebApi.EndpointToggle;
 
 namespace ArturRios.Util.WebApi.Tests.EndpointToggle;
 
+[Trait("Category", "Unit")]
 public class EndpointDisabledExceptionTests
 {
     [Fact]

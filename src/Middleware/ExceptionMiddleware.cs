@@ -2,7 +2,7 @@
 using ArturRios.Util.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace ArturRios.Util.WebApi.Middleware;
 
@@ -46,11 +46,11 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
             return;
         }
 
-        var messages = new[] { "Internal server error, please try again later" };
+        var errors = new[] { "Internal server error, please try again later" };
 
         if (exception is CustomException customException)
         {
-            messages = customException.Messages;
+            errors = customException.Messages;
         }
 
         logger.LogError(exception, "Unhandled exception while processing the request.");
@@ -58,10 +58,12 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = HttpStatusCodes.InternalServerError;
 
+        // Errors, not messages: Success is computed from Errors, so a 500 whose text sat under Messages
+        // came back with "success": true. AuthenticationMiddleware already envelopes its 401 this way.
         var output = DataOutput<string>.New
             .WithData(string.Empty)
-            .WithMessages(messages);
+            .WithErrors(errors);
 
-        await context.Response.WriteAsync(JsonConvert.SerializeObject(output));
+        await context.Response.WriteAsync(JsonSerializer.Serialize(output));
     }
 }

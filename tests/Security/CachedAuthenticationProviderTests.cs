@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class CachedAuthenticationProviderTests
 {
     private static readonly Guid FirstId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
@@ -45,7 +46,7 @@ public class CachedAuthenticationProviderTests
     private static MemoryCache NewCache() => new(new MemoryCacheOptions());
 
     [Fact]
-    public void SecondLookupWithinTtl_IsServedFromCache()
+    public void GivenALookupWithinTheTimeToLive_WhenRepeated_ThenItIsServedFromTheCache()
     {
         var inner = new CountingAuthenticationProvider(id => new AuthenticatedUser(id, 1));
         var provider = new CachedAuthenticationProvider(inner, NewCache());
@@ -59,7 +60,7 @@ public class CachedAuthenticationProviderTests
     }
 
     [Fact]
-    public void DifferentIds_AreCachedIndependently()
+    public void GivenTwoDifferentIds_WhenBothAreLookedUp_ThenEachIsCachedIndependently()
     {
         var inner = new CountingAuthenticationProvider(id => new AuthenticatedUser(id, 1));
         var provider = new CachedAuthenticationProvider(inner, NewCache());
@@ -72,7 +73,7 @@ public class CachedAuthenticationProviderTests
     }
 
     [Fact]
-    public void Misses_AreNotCached_ByDefault()
+    public void GivenDefaultOptions_WhenALookupMisses_ThenTheMissIsNotCached()
     {
         var inner = new CountingAuthenticationProvider(_ => null);
         var provider = new CachedAuthenticationProvider(inner, NewCache());
@@ -84,7 +85,7 @@ public class CachedAuthenticationProviderTests
     }
 
     [Fact]
-    public void Misses_AreCached_WhenNegativeCachingEnabled()
+    public void GivenNegativeCachingIsEnabled_WhenALookupMisses_ThenTheMissIsCached()
     {
         var inner = new CountingAuthenticationProvider(_ => null);
         var options = new CachedAuthenticationProviderOptions { CacheMisses = true };
@@ -97,7 +98,7 @@ public class CachedAuthenticationProviderTests
     }
 
     [Fact]
-    public void GetAuthenticatedUserByEmail_CachesPositiveResult()
+    public void GivenALookupByEmailThatFindsAUser_WhenRepeated_ThenItIsServedFromTheCache()
     {
         var inner = new CountingProvider(byEmail: new AuthenticatedUser(SecondId, 1));
         var cache = NewCache();
@@ -112,7 +113,7 @@ public class CachedAuthenticationProviderTests
     }
 
     [Fact]
-    public void GetAuthenticatedUserByEmail_CachesMiss_WhenEnabled()
+    public void GivenNegativeCachingIsEnabled_WhenALookupByEmailMisses_ThenTheMissIsCached()
     {
         var inner = new CountingProvider(byEmail: null);
         var cache = NewCache();
@@ -125,7 +126,7 @@ public class CachedAuthenticationProviderTests
     }
 
     [Fact]
-    public void EmailAndIdCaches_AreIndependent()
+    public void GivenTheSameUser_WhenLookedUpByIdAndByEmail_ThenTheTwoCachesStayIndependent()
     {
         var inner = new CountingProvider(byId: new AuthenticatedUser(FirstId, 1), byEmail: new AuthenticatedUser(SecondId, 1));
         var cache = NewCache();
