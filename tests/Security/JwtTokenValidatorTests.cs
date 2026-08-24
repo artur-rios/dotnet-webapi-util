@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class JwtTokenValidatorTests
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
@@ -114,7 +115,7 @@ public class JwtTokenValidatorTests
             new AuthenticationOptions { JwtMode = mode });
 
     [Fact]
-    public async Task ClaimsOnly_ReturnsUserFromClaims()
+    public async Task GivenClaimsOnlyMode_WhenValidatingAValidToken_ThenTheUserComesFromTheClaims()
     {
         var mapper = new DefaultAuthenticatedUserMapper();
         var token = CreateToken(mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
@@ -126,7 +127,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task ClaimsOnly_ReturnsCallerType_WithCallerClaims()
+    public async Task GivenClaimsOnlyModeAndACallerMapper_WhenValidating_ThenTheCallersOwnUserTypeComesBack()
     {
         var mapper = new TenantMapper();
         var token = CreateToken(mapper.ToClaims(new TenantUser(UserId, 3, "acme")));
@@ -139,7 +140,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task InvalidSignature_ReturnsError()
+    public async Task GivenATokenWithAnInvalidSignature_WhenValidating_ThenAnErrorIsReported()
     {
         var result = await Validator(JwtValidationMode.ClaimsOnly).ValidateAsync("not-a-token", ContextWithProvider(null));
 
@@ -148,7 +149,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task ClaimsOnly_ReturnsError_WhenMapperReturnsNull()
+    public async Task GivenAMapperThatReturnsNull_WhenValidatingInClaimsOnlyMode_ThenAnErrorIsReported()
     {
         var token = CreateToken(new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3)));
         var result = await Validator(JwtValidationMode.ClaimsOnly, new NullMapper())
@@ -159,7 +160,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task ClaimsOnly_ReturnsError_WhenMapperThrows()
+    public async Task GivenAMapperThatThrows_WhenValidatingInClaimsOnlyMode_ThenAnErrorIsReported()
     {
         var token = CreateToken(new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3)));
         var result = await Validator(JwtValidationMode.ClaimsOnly, new ThrowingMapper())
@@ -170,7 +171,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Revalidate_ResolvesUserFromProvider()
+    public async Task GivenRevalidateMode_WhenValidating_ThenTheUserIsResolvedFromTheProvider()
     {
         var token = CreateToken(new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3)));
         var provider = new StubProvider(new AuthenticatedUser(UserId, 9));
@@ -181,7 +182,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Revalidate_UsesOverriddenIdFromClaims_WithoutCallingFromClaims()
+    public async Task GivenAMapperOverridingIdFromClaims_WhenValidatingInRevalidateMode_ThenOnlyThatOverrideIsUsed()
     {
         var mapper = new IdOnlyMapper();
         var token = CreateToken(mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
@@ -194,7 +195,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Revalidate_ReturnsError_WhenTokenHasNoIdClaim()
+    public async Task GivenATokenWithNoIdClaim_WhenValidatingInRevalidateMode_ThenAnErrorIsReported()
     {
         var token = CreateToken(new Dictionary<string, string> { { TokenClaimKeys.RoleId, "3" } });
         var provider = new StubProvider(new AuthenticatedUser(UserId, 9));
@@ -206,7 +207,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Revalidate_ReturnsError_WhenMapperThrows()
+    public async Task GivenAMapperThatThrows_WhenValidatingInRevalidateMode_ThenAnErrorIsReported()
     {
         var token = CreateToken(new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3)));
         var result = await Validator(JwtValidationMode.Revalidate, new ThrowingMapper())
@@ -217,7 +218,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Revalidate_ReturnsUserNotFound_WhenProviderReturnsNull()
+    public async Task GivenAProviderThatFindsNoUser_WhenValidatingInRevalidateMode_ThenUserNotFoundIsReported()
     {
         var token = CreateToken(new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3)));
         var result = await Validator(JwtValidationMode.Revalidate).ValidateAsync(token, ContextWithProvider(new StubProvider(null)));
@@ -246,7 +247,7 @@ public class JwtTokenValidatorTests
             new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly });
 
     [Fact]
-    public async Task Keys_AcceptsTokenSignedWithTheCurrentKey()
+    public async Task GivenConfiguredKeys_WhenValidatingATokenSignedWithTheCurrentKey_ThenItIsAccepted()
     {
         var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
         var configuration = RotatingConfig(PreviousKey, CurrentKey);
@@ -259,7 +260,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Keys_AcceptsTokenSignedWithARetiredButStillAcceptedKey()
+    public async Task GivenConfiguredKeys_WhenValidatingATokenSignedWithARetiredButAcceptedKey_ThenItIsAccepted()
     {
         // The point of the feature: this token was issued before the rotation, and its holder must
         // not be signed out by it.
@@ -273,7 +274,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Keys_RejectsTokenSignedWithAWithdrawnKey()
+    public async Task GivenConfiguredKeys_WhenValidatingATokenSignedWithAWithdrawnKey_ThenItIsRejected()
     {
         // And the half that matters when a key has leaked rather than merely aged.
         var claims = new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3));
@@ -287,7 +288,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task Keys_AcceptsTokenIssuedBeforeRotationWasConfigured()
+    public async Task GivenConfiguredKeys_WhenValidatingATokenIssuedBeforeRotation_ThenItIsAccepted()
     {
         // No kid, because it was signed by a configuration that had no Keys. Adopting rotation must
         // not invalidate what was issued before it.
@@ -301,7 +302,7 @@ public class JwtTokenValidatorTests
     }
 
     [Fact]
-    public async Task NoKeys_StillValidatesAgainstTheSingleSecret()
+    public async Task GivenNoConfiguredKeys_WhenValidating_ThenTheSingleSecretIsStillUsed()
     {
         // The fallback every configuration written before this took. It has its own test because the
         // branch that chooses it is the one thing standing between those consumers and a break.

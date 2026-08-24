@@ -4,6 +4,7 @@ using ArturRios.Util.WebApi.Client;
 
 namespace ArturRios.Util.WebApi.Tests.Client;
 
+[Trait("Category", "Unit")]
 public class BaseWebApiClientRouteTests
 {
     private sealed class TestRoute(HttpGateway gateway) : BaseWebApiClientRoute(gateway)
@@ -13,7 +14,7 @@ public class BaseWebApiClientRouteTests
     }
 
     [Fact]
-    public void Authorize_IsIdempotent_AndSetsBearerScheme()
+    public void GivenARouteAuthorizedTwice_WhenInspected_ThenOneBearerSchemeIsSet()
     {
         var httpClient = new HttpClient { BaseAddress = new Uri("https://example.test") };
         var route = new TestRoute(new HttpGateway(httpClient));

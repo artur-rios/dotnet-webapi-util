@@ -5,6 +5,7 @@ using ArturRios.Util.WebApi.Security.Records;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class DefaultAuthenticatedUserMapperTests
 {
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
@@ -12,7 +13,7 @@ public class DefaultAuthenticatedUserMapperTests
     private static readonly IAuthenticatedUserMapper Mapper = new DefaultAuthenticatedUserMapper();
 
     [Fact]
-    public void ToClaims_WritesIdAndRoleId()
+    public void GivenAUser_WhenWritingItsClaims_ThenTheIdAndRoleIdAreWritten()
     {
         var claims = Mapper.ToClaims(new AuthenticatedUser(UserId, 3));
 
@@ -21,7 +22,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void FromClaims_ReconstructsUser_FromClaimsWrittenByToClaims()
+    public void GivenClaimsWrittenByTheMapper_WhenReadingThemBack_ThenTheUserIsReconstructed()
     {
         var user = Mapper.FromClaims(Mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
 
@@ -31,7 +32,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void FromClaims_ReturnsNull_WhenIdIsNotAGuid()
+    public void GivenAnIdClaimThatIsNotAGuid_WhenReadingTheUser_ThenNullComesBack()
     {
         var claims = new Dictionary<string, string>
         {
@@ -42,7 +43,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void FromClaims_ReturnsNull_WhenRoleIdIsNotNumeric()
+    public void GivenARoleIdClaimThatIsNotNumeric_WhenReadingTheUser_ThenNullComesBack()
     {
         var claims = new Dictionary<string, string>
         {
@@ -53,7 +54,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void FromClaims_ReturnsNull_WhenIdClaimIsMissing()
+    public void GivenNoIdClaim_WhenReadingTheUser_ThenNullComesBack()
     {
         var claims = new Dictionary<string, string> { { TokenClaimKeys.RoleId, "3" } };
 
@@ -61,7 +62,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void FromClaims_ReturnsNull_WhenRoleIdClaimIsMissing()
+    public void GivenNoRoleIdClaim_WhenReadingTheUser_ThenNullComesBack()
     {
         var claims = new Dictionary<string, string> { { TokenClaimKeys.Id, UserId.ToString() } };
 
@@ -69,7 +70,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void IdFromClaims_ReturnsId_FromClaimsWrittenByToClaims()
+    public void GivenClaimsWrittenByTheMapper_WhenReadingTheIdBack_ThenItComesBack()
     {
         var id = Mapper.IdFromClaims(Mapper.ToClaims(new AuthenticatedUser(UserId, 3)));
 
@@ -77,7 +78,7 @@ public class DefaultAuthenticatedUserMapperTests
     }
 
     [Fact]
-    public void IdFromClaims_ReturnsNull_WhenClaimsCannotProduceAUser()
+    public void GivenClaimsThatCannotProduceAUser_WhenReadingTheId_ThenNullComesBack()
     {
         Assert.Null(Mapper.IdFromClaims(new Dictionary<string, string>()));
     }

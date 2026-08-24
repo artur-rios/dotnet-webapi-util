@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.Tests.EndpointToggle;
 
+[Trait("Category", "Unit")]
 public class EndpointToggleAttributeTests
 {
     private const string ControllerName = "Samples";

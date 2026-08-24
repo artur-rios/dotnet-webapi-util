@@ -4,10 +4,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Util.WebApi.Tests.Middleware;
 
+[Trait("Category", "Unit")]
 public class ExceptionMiddlewareTests
 {
     [Fact]
-    public async Task UnhandledException_Writes500_WithGenericMessage()
+    public async Task GivenAnUnhandledException_WhenTheRequestIsProcessed_ThenA500ComesBackWithAGenericMessage()
     {
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();

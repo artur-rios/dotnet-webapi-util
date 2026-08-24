@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class HttpContextExtensionsTests
 {
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
@@ -25,7 +26,7 @@ public class HttpContextExtensionsTests
     }
 
     [Fact]
-    public void GetUser_ReturnsInterface_WhenUserAttached()
+    public void GivenAUserIsAttached_WhenReadingIt_ThenTheInterfaceComesBack()
     {
         var context = ContextWithUser(new TestUser(UserId, 3));
 
@@ -37,13 +38,13 @@ public class HttpContextExtensionsTests
     }
 
     [Fact]
-    public void GetUser_ReturnsNull_WhenNoUserAttached()
+    public void GivenNoUserIsAttached_WhenReadingIt_ThenNullComesBack()
     {
         Assert.Null(ContextWithUser(null).GetUser());
     }
 
     [Fact]
-    public void GetUserOfT_ReturnsConcreteType_WhenTypesMatch()
+    public void GivenTheAttachedUserMatchesTheRequestedType_WhenReadingIt_ThenTheConcreteTypeComesBack()
     {
         var context = ContextWithUser(new TestUser(UserId, 3));
 
@@ -54,7 +55,7 @@ public class HttpContextExtensionsTests
     }
 
     [Fact]
-    public void GetUserOfT_ReturnsNull_WhenTypeDoesNotMatch()
+    public void GivenTheAttachedUserIsADifferentType_WhenReadingIt_ThenNullComesBack()
     {
         var context = ContextWithUser(new OtherUser(UserId, 3));
 
@@ -62,7 +63,7 @@ public class HttpContextExtensionsTests
     }
 
     [Fact]
-    public void GetUserOfT_ReturnsNull_WhenNoUserAttached()
+    public void GivenNoUserIsAttached_WhenReadingItAsAConcreteType_ThenNullComesBack()
     {
         Assert.Null(ContextWithUser(null).GetUser<TestUser>());
     }

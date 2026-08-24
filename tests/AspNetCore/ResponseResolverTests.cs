@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ArturRios.Util.WebApi.Tests.AspNetCore;
 
+[Trait("Category", "Unit")]
 public class ResponseResolverTests
 {
     // --- Behavior preserved when no map / no statusCode ---

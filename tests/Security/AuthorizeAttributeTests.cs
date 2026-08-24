@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
 
+[Trait("Category", "Unit")]
 public class AuthorizeAttributeTests
 {
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
@@ -36,7 +37,7 @@ public class AuthorizeAttributeTests
     }
 
     [Fact]
-    public void OnAuthorization_CustomUserType_DoesNotSetResult()
+    public void GivenACustomUserTypeIsAttached_WhenAuthorizing_ThenTheRequestIsAllowedThrough()
     {
         var context = BuildContext(new TenantUser(UserId, 1, "acme"), allowAnonymous: false);
 
@@ -46,7 +47,7 @@ public class AuthorizeAttributeTests
     }
 
     [Fact]
-    public void OnAuthorization_NoUser_ReturnsUnauthorized()
+    public void GivenNoUserIsAttached_WhenAuthorizing_ThenUnauthorizedIsReturned()
     {
         var context = BuildContext(null, allowAnonymous: false);
 
@@ -57,7 +58,7 @@ public class AuthorizeAttributeTests
     }
 
     [Fact]
-    public void OnAuthorization_AllowAnonymousAndNoUser_DoesNotSetResult()
+    public void GivenAnAnonymousEndpointAndNoUser_WhenAuthorizing_ThenTheRequestIsAllowedThrough()
     {
         var context = BuildContext(null, allowAnonymous: true);
 

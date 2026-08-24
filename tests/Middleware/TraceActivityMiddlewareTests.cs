@@ -4,10 +4,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Util.WebApi.Tests.Middleware;
 
+[Trait("Category", "Unit")]
 public class TraceActivityMiddlewareTests
 {
     [Fact]
-    public async Task SetsTraceIdAndTraceparentHeader()
+    public async Task GivenARequest_WhenItPassesThroughTheMiddleware_ThenTheTraceIdAndTraceparentHeaderAreSet()
     {
         var context = new DefaultHttpContext();
         var middleware = new TraceActivityMiddleware(_ => Task.CompletedTask, NullLogger<TraceActivityMiddleware>.Instance);
