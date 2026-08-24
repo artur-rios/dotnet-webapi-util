@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ArturRios.Util.WebApi</PackageId>
-    <Version>3.3.0</Version>
+    <Version>4.0.0</Version>
     <Authors>Artur Rios</Authors>
     <Company>Artur Rios</Company>
     <Description>Utilities for developing web API's in .NET</Description>
@@ -21,9 +21,9 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="ArturRios.Configuration" Version="1.1.0" />
-    <PackageReference Include="ArturRios.Jwt" Version="1.1.0" />
-    <PackageReference Include="ArturRios.Util" Version="2.0.0" />
+    <PackageReference Include="ArturRios.Configuration" Version="1.2.0" />
+    <PackageReference Include="ArturRios.Jwt" Version="1.2.0" />
+    <PackageReference Include="ArturRios.Util" Version="2.1.0" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="Google.Apis.Auth" Version="1.76.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
