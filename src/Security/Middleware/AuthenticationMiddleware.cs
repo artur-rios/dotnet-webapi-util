@@ -1,14 +1,13 @@
 ﻿using ArturRios.Configuration.Providers;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.Configuration;
+using ArturRios.Util.WebApi.Extensions;
 using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Attributes;
-using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
-using ArturRios.Util.WebApi.Security.Constants;
+using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.Http;
-using System.Text.Json;
 
 namespace ArturRios.Util.WebApi.Security.Middleware;
 
@@ -28,26 +27,23 @@ public class AuthenticationMiddleware(
     AuthenticationOptions options,
     IEnumerable<ITokenValidator> validators) : WebApiMiddleware
 {
+    private const string MissingTokenError = "Authentication token not provided";
+    private const string UnauthorizedError = "Unauthorized";
+
     private readonly ITokenValidator[] _validators = validators.ToArray();
 
     /// <summary>Validates the request token and, on success, attaches the authenticated user before invoking the next middleware; otherwise writes a 401 response.</summary>
     /// <param name="context">The current HTTP context.</param>
     public async Task InvokeAsync(HttpContext context)
     {
-        var endpoint = context.GetEndpoint();
-
-        var skipRoute =
-            IsSwaggerRoute(context.Request.Path.Value ?? string.Empty) ||
-            endpoint?.Metadata.GetMetadata<AllowAnonymousAttribute>() is not null;
-
-        if (skipRoute)
+        if (context.GetEndpoint().AllowsAnonymous() || IsSwaggerRoute(context.Request.Path))
         {
             await next(context);
 
             return;
         }
 
-        var token = TokenExtractor.Extract(context, options.Source, options.CookieName);
+        var token = context.ExtractToken(options.Source, options.CookieName);
 
         string? lastError = null;
 
@@ -57,7 +53,7 @@ public class AuthenticationMiddleware(
 
             if (user is not null)
             {
-                context.Items[AuthenticationItemKeys.User] = user;
+                context.SetUser(user);
 
                 await next(context);
 
@@ -67,27 +63,18 @@ public class AuthenticationMiddleware(
             lastError = error;
         }
 
-        await WriteUnauthorized(context, lastError);
+        // Validators still run without a token (the contract allows it, for schemes that read something
+        // else off the request); the error just says plainly what was missing.
+        await WriteUnauthorized(context, string.IsNullOrEmpty(token) ? MissingTokenError : lastError);
     }
 
-    private static async Task WriteUnauthorized(HttpContext context, string? authError)
-    {
-        var output = ProcessOutput.New.WithError(authError ?? "Unauthorized");
+    private static Task WriteUnauthorized(HttpContext context, string? authError) =>
+        context.Response.HasStarted
+            ? Task.CompletedTask
+            : context.Response.WriteOutputAsync(StatusCodes.Status401Unauthorized,
+                ProcessOutput.New.WithError(authError ?? UnauthorizedError));
 
-        if (context.Response.HasStarted)
-        {
-            return;
-        }
-
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        context.Response.ContentType = "application/json";
-
-        var payload = JsonSerializer.Serialize(output);
-
-        await context.Response.WriteAsync(payload);
-    }
-
-    private bool IsSwaggerRoute(string path) =>
-        settings.GetBool(AppSettingsKeys.SwaggerEnabled) is true &&
-        path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase);
+    private bool IsSwaggerRoute(PathString path) =>
+        path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase) &&
+        settings.GetBool(AppSettingsKeys.SwaggerEnabled) is true;
 }

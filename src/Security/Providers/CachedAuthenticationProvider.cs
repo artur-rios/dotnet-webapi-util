@@ -16,36 +16,21 @@ public class CachedAuthenticationProvider(
     private readonly CachedAuthenticationProviderOptions _options = options ?? new CachedAuthenticationProviderOptions();
 
     /// <inheritdoc />
-    public IAuthenticatedUser? GetAuthenticatedUserById(Guid id)
-    {
-        var key = $"{_options.CacheKeyPrefix}{id}";
-
-        if (cache.TryGetValue(key, out IAuthenticatedUser? cachedUser))
-        {
-            return cachedUser;
-        }
-
-        var user = inner.GetAuthenticatedUserById(id);
-
-        if (user is not null || _options.CacheMisses)
-        {
-            cache.Set(key, user, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = _options.Ttl });
-        }
-
-        return user;
-    }
+    public IAuthenticatedUser? GetAuthenticatedUserById(Guid id) =>
+        GetOrLoad($"{_options.CacheKeyPrefix}{id}", () => inner.GetAuthenticatedUserById(id));
 
     /// <inheritdoc />
-    public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email)
-    {
-        var key = $"{_options.EmailCacheKeyPrefix}{email}";
+    public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) =>
+        GetOrLoad($"{_options.EmailCacheKeyPrefix}{email}", () => inner.GetAuthenticatedUserByEmail(email));
 
+    private IAuthenticatedUser? GetOrLoad(string key, Func<IAuthenticatedUser?> load)
+    {
         if (cache.TryGetValue(key, out IAuthenticatedUser? cachedUser))
         {
             return cachedUser;
         }
 
-        var user = inner.GetAuthenticatedUserByEmail(email);
+        var user = load();
 
         if (user is not null || _options.CacheMisses)
         {

@@ -141,7 +141,7 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
 
-        var output = JsonSerializer.Deserialize<DataOutput<string>>(await response.Content.ReadAsStringAsync())!;
+        var output = JsonSerializer.Deserialize<DataOutput<string>>(await response.Content.ReadAsStringAsync(), JsonSerializerOptions.Web)!;
 
         Assert.False(output.Success);
         Assert.Contains(output.Errors, error => error.Contains("Internal server error"));
@@ -155,7 +155,7 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
 
-        var output = JsonSerializer.Deserialize<ProcessOutput>(await response.Content.ReadAsStringAsync())!;
+        var output = JsonSerializer.Deserialize<ProcessOutput>(await response.Content.ReadAsStringAsync(), JsonSerializerOptions.Web)!;
 
         Assert.False(output.Success);
         Assert.NotEmpty(output.Errors);

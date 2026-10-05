@@ -1,10 +1,12 @@
 ﻿using System.Net;
+using System.Reflection;
 using ArturRios.Configuration.Enums;
 using ArturRios.Output;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.EndpointToggle;
 
@@ -27,8 +29,10 @@ namespace ArturRios.Util.WebApi.EndpointToggle;
 [AttributeUsage(AttributeTargets.Method)]
 public class EndpointToggleAttribute : ActionFilterAttribute
 {
-    private const string DefaultAppSettingsKeyPrefix = "Endpoints:[Controller]";
-    private const string DefaultEnvFileKeyPrefix = "Endpoints_[Controller]";
+    private const string ControllerPlaceholder = "[Controller]";
+    private const string DefaultAppSettingsKeyPrefix = "Endpoints:" + ControllerPlaceholder;
+    private const string DefaultEnvFileKeyPrefix = "Endpoints_" + ControllerPlaceholder;
+    private const string DisabledMessage = "This endpoint is currently disabled";
     private readonly ConfigurationSourceType _configurationSource;
     private readonly string _disabledMessage;
     private readonly OutputType _disabledOutputType;
@@ -49,7 +53,7 @@ public class EndpointToggleAttribute : ActionFilterAttribute
         bool isEnabled = true,
         HttpStatusCode disabledStatusCode = HttpStatusCode.NotFound,
         OutputType disabledOutputType = OutputType.Object,
-        string disabledMessage = "This endpoint is currently disabled"
+        string disabledMessage = DisabledMessage
     )
     {
         _isEnabled = isEnabled;
@@ -78,7 +82,7 @@ public class EndpointToggleAttribute : ActionFilterAttribute
         string keySuffix = "",
         HttpStatusCode disabledStatusCode = HttpStatusCode.NotFound,
         OutputType disabledOutputType = OutputType.Object,
-        string disabledMessage = "This endpoint is currently disabled"
+        string disabledMessage = DisabledMessage
     )
     {
         _configurationSource = configurationSource;
@@ -103,7 +107,7 @@ public class EndpointToggleAttribute : ActionFilterAttribute
     }
 
     /// <summary>The default message describing a disabled endpoint: <c>"This endpoint is currently disabled"</c>.</summary>
-    public static string DefaultDisabledMessage => "This endpoint is currently disabled";
+    public static string DefaultDisabledMessage => DisabledMessage;
 
     /// <summary>Evaluates the toggle before the action runs and, when the endpoint is disabled, short-circuits the
     /// pipeline with a response shaped according to the configured <see cref="OutputType"/>.</summary>
@@ -133,7 +137,7 @@ public class EndpointToggleAttribute : ActionFilterAttribute
                 ReturnObject(context);
                 break;
             case OutputType.Exception:
-                throw new EndpointDisabledException([_disabledMessage]);
+                throw new EndpointDisabledException([_disabledMessage], (int)_disabledStatusCode);
             default:
                 ReturnObject(context);
                 break;
@@ -142,17 +146,18 @@ public class EndpointToggleAttribute : ActionFilterAttribute
 
     private void ReturnObject(ActionExecutingContext context)
     {
-        var output = ProcessOutput.New.WithMessage(_disabledMessage);
+        // An error, not a message: Success is computed from Errors, so the disabled text under Messages
+        // came back as a 404 whose envelope said "success": true.
+        var output = ProcessOutput.New.WithError(_disabledMessage);
 
         context.Result = new ObjectResult(output) { StatusCode = (int)_disabledStatusCode };
     }
 
     private void ReturnDefault(ActionExecutingContext context)
     {
-        var methodInfo = (context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
-        var returnType = methodInfo?.ReturnType;
+        var returnType = UnwrapReturnType(GetMethodInfo(context)?.ReturnType);
 
-        if (returnType == null || returnType == typeof(void))
+        if (returnType is null)
         {
             context.Result = new StatusCodeResult((int)_disabledStatusCode);
 
@@ -162,6 +167,31 @@ public class EndpointToggleAttribute : ActionFilterAttribute
         var defaultObj = returnType.IsValueType ? Activator.CreateInstance(returnType) : null;
 
         context.Result = new ObjectResult(defaultObj) { StatusCode = (int)_disabledStatusCode };
+    }
+
+    /// <summary>The type whose default the action would have produced: the <c>T</c> of <see cref="Task{TResult}"/>,
+    /// <see cref="ValueTask{TResult}"/> or <see cref="ActionResult{TValue}"/>, or <see langword="null"/> when the
+    /// action produces no value (<c>void</c>, <see cref="Task"/>, <see cref="ValueTask"/>).</summary>
+    private static Type? UnwrapReturnType(Type? returnType)
+    {
+        if (returnType is null || returnType == typeof(void) || returnType == typeof(Task) ||
+            returnType == typeof(ValueTask))
+        {
+            return null;
+        }
+
+        if (returnType.IsGenericType)
+        {
+            var definition = returnType.GetGenericTypeDefinition();
+
+            if (definition == typeof(Task<>) || definition == typeof(ValueTask<>) ||
+                definition == typeof(ActionResult<>))
+            {
+                return UnwrapReturnType(returnType.GetGenericArguments()[0]);
+            }
+        }
+
+        return returnType;
     }
 
     private bool GetToggleFromFile(ActionExecutingContext context)
@@ -185,65 +215,36 @@ public class EndpointToggleAttribute : ActionFilterAttribute
 
     private static bool? GetToggleFromAppSettings(ActionExecutingContext context, string key)
     {
-        if (context.HttpContext.RequestServices.GetService(typeof(IConfiguration)) is not IConfiguration config)
-        {
-            return null;
-        }
+        var config = context.HttpContext.RequestServices?.GetService<IConfiguration>();
 
-        var value = config[key];
-
-        if (string.IsNullOrEmpty(value))
-        {
-            return null;
-        }
-
-        return bool.TryParse(value, out var parsed) ? parsed : null;
+        return ParseToggle(config?[key]);
     }
 
-    private static bool? GetToggleFromEnvironmentVariables(string key)
-    {
-        var envValue = Environment.GetEnvironmentVariable(key);
+    private static bool? GetToggleFromEnvironmentVariables(string key) =>
+        ParseToggle(Environment.GetEnvironmentVariable(key));
 
-        if (string.IsNullOrEmpty(envValue))
-        {
-            return null;
-        }
-
-        if (bool.TryParse(envValue, out var parsed))
-        {
-            return parsed;
-        }
-
-        return null;
-    }
+    private static bool? ParseToggle(string? value) => bool.TryParse(value, out var parsed) ? parsed : null;
 
     private string? GetDefaultKey(ActionExecutingContext context)
     {
-        var methodInfo = (context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
-        var methodName = methodInfo?.Name;
+        var methodInfo = GetMethodInfo(context);
 
-        var keyPrefix = GetKeyPrefix(context, _key);
-
-        return methodInfo is not null ? AddKeySuffix($"{keyPrefix}{_keySeparator}{methodName}") : null;
-    }
-
-    private static string? GetControllerName(ActionExecutingContext context) =>
-        (context.ActionDescriptor as ControllerActionDescriptor)?.ControllerName;
-
-    private string GetKeyPrefix(ActionExecutingContext context, string key)
-    {
-        if (string.IsNullOrWhiteSpace(_keyPrefix))
+        if (methodInfo is null)
         {
-            return key;
+            return null;
         }
 
-        var controllerName = GetControllerName(context);
+        var controllerName = (context.ActionDescriptor as ControllerActionDescriptor)?.ControllerName;
 
-        return controllerName is null
-            ? _keyPrefix.Replace($"{_keySeparator}[Controller]", string.Empty)
-            : _keyPrefix.Replace("[Controller]", controllerName);
+        var keyPrefix = controllerName is null
+            ? _keyPrefix.Replace($"{_keySeparator}{ControllerPlaceholder}", string.Empty)
+            : _keyPrefix.Replace(ControllerPlaceholder, controllerName);
+
+        var key = $"{keyPrefix}{_keySeparator}{methodInfo.Name}";
+
+        return string.IsNullOrWhiteSpace(_keySuffix) ? key : $"{key}{_keySeparator}{_keySuffix}";
     }
 
-    private string AddKeySuffix(string key) =>
-        string.IsNullOrWhiteSpace(_keySuffix) ? key : $"{key}{_keySeparator}{_keySuffix}";
+    private static MethodInfo? GetMethodInfo(ActionExecutingContext context) =>
+        (context.ActionDescriptor as ControllerActionDescriptor)?.MethodInfo;
 }

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using ArturRios.Util.WebApi.Extensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -7,13 +8,22 @@ namespace ArturRios.Util.WebApi.Middleware;
 /// <summary>
 /// Ensures every request is associated with a W3C-format <see cref="Activity"/>, propagating or creating one as
 /// needed, and exposes its trace id on <see cref="HttpContext.TraceIdentifier"/>, <c>HttpContext.Items["TraceId"]</c>
-/// and the response's <c>traceparent</c> header.
+/// and the response's <c>traceparent</c> header. When it has to create the activity itself, an incoming
+/// <c>traceparent</c>/<c>tracestate</c> pair becomes its parent, so the caller's trace continues. Logs the start of
+/// each request at <see cref="LogLevel.Information"/> with its trace id and the client's IP address (see
+/// <see cref="HttpContextClientExtensions.GetClientIpAddress"/>), which is also tagged on the activity as
+/// <c>client.address</c>.
 /// </summary>
 /// <param name="next">The next middleware in the pipeline.</param>
 /// <param name="logger">Used to log the start and end of each request's trace.</param>
 public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivityMiddleware> logger) : WebApiMiddleware
 {
+    private const string ActivityName = "ServerReceive";
+    private const string ClientAddressTag = "client.address";
+    private const string UnknownClientIp = "unknown";
+    private const string TraceIdItemKey = "TraceId";
     private const string TraceParentHeader = "traceparent";
+    private const string TraceStateHeader = "tracestate";
 
     static TraceActivityMiddleware()
     {
@@ -27,26 +37,26 @@ public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivity
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var createdActivity = false;
         var activity = Activity.Current;
+        var createdActivity = activity is null;
 
-        if (activity == null)
-        {
-            activity = new Activity("ServerReceive").SetIdFormat(ActivityIdFormat.W3C).Start();
-            createdActivity = true;
-        }
+        activity ??= StartActivity(context.Request);
 
         var traceId = activity.TraceId.ToString();
 
         context.TraceIdentifier = traceId;
-        context.Items["TraceId"] = traceId;
+        context.Items[TraceIdItemKey] = traceId;
+        context.Response.Headers[TraceParentHeader] = activity.ToTraceParent();
 
+        var clientIp = context.GetClientIpAddress();
 
-        var tp = $"00-{activity.TraceId}-{activity.SpanId}-{(activity.Recorded ? "01" : "00")}";
+        if (clientIp is not null)
+        {
+            activity.SetTag(ClientAddressTag, clientIp);
+        }
 
-        context.Response.Headers[TraceParentHeader] = tp;
-
-        logger.LogTrace("Started request with TraceId {TraceId}", traceId);
+        logger.LogInformation("Started request with TraceId {TraceId} from {ClientIp}", traceId,
+            clientIp ?? UnknownClientIp);
 
         try
         {
@@ -61,5 +71,19 @@ public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivity
                 activity.Stop();
             }
         }
+    }
+
+    private static Activity StartActivity(HttpRequest request)
+    {
+        var activity = new Activity(ActivityName).SetIdFormat(ActivityIdFormat.W3C);
+
+        if (ActivityContext.TryParse(request.Headers[TraceParentHeader], request.Headers[TraceStateHeader],
+                out var parent))
+        {
+            activity.SetParentId(parent.TraceId, parent.SpanId, parent.TraceFlags);
+            activity.TraceStateString = parent.TraceState;
+        }
+
+        return activity.Start();
     }
 }

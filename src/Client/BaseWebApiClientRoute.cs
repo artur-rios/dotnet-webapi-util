@@ -34,10 +34,16 @@ public abstract class BaseWebApiClientRoute(HttpGateway gateway)
     /// <summary>Authenticates against <paramref name="authRoute"/> and applies the resulting token to the gateway's default headers.</summary>
     /// <param name="credentials">The credentials to authenticate with.</param>
     /// <param name="authRoute">The relative authentication route.</param>
+    /// <exception cref="WebApiClientException">Thrown when the response has no body, is not valid, or carries no token.</exception>
     protected async Task AuthenticateAndAuthorizeAsync(Credentials credentials, string authRoute)
     {
         var authentication = await AuthenticateAsync(credentials, authRoute);
 
-        Authorize(authentication.Token!);
+        if (!authentication.Valid || string.IsNullOrWhiteSpace(authentication.Token))
+        {
+            throw new WebApiClientException("Could not authenticate: the authentication response carried no valid token.");
+        }
+
+        Authorize(authentication.Token);
     }
 }

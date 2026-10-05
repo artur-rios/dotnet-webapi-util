@@ -24,7 +24,7 @@ flowchart LR
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
     Exception --> Auth["AuthenticationMiddleware<br/><i>validates the request token, attaches IAuthenticatedUser</i>"]
     Auth --> Endpoint["Controller / endpoint"]
-    Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
+    Endpoint --> Resolver["ToActionResult<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
 ```
 
@@ -32,11 +32,11 @@ flowchart LR
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](configuration/) |
+| Configuration / bootstrap | `WebApiStartup` runs one standard sequence — configuration loading, Swagger, the middleware pipeline — leaving you a single `ConfigureServices` method, and every step is also a standalone extension; `WebApiParameters` parses command-line startup args. | [Configuration](configuration/) |
 | Security (JWT, Google + roles) | `AuthenticationMiddleware` reads the token from the header, a cookie, or either, and validates it as an app HMAC JWT or a Google ID token (either accepted per request), attaching an `IAuthenticatedUser`; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](security/) |
-| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & Diagnostics](middleware-and-diagnostics/) |
+| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate the W3C `traceparent`/`tracestate` across a request and its outgoing calls. | [Middleware & Diagnostics](middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP Client](http-client/) |
-| Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](responses/) |
+| Responses | `output.ToActionResult(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](responses/) |
 | Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint Toggling](endpoint-toggle/) |
 
 ## Installation
@@ -50,7 +50,7 @@ dotnet add package ArturRios.Util.WebApi
 ## The result envelope
 
 Endpoints return an `ArturRios.Output` envelope — `DataOutput<T>` (data + success/errors) or, for
-operations with no payload, `ProcessOutput` — and `ResponseResolver` maps that envelope onto an
+operations with no payload, `ProcessOutput` — and `ToActionResult` maps that envelope onto an
 `ActionResult`, so success and failure both flow through the same, predictable shape instead of thrown
 exceptions.
 

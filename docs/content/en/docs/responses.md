@@ -2,22 +2,27 @@
 title: Responses
 weight: 60
 description: >-
-  `ResponseResolver` is a static class that converts `ArturRios.Output` envelopes — `DataOutput<T>`, `ProcessOutput`, and `PaginatedOutput<T>` — into ASP.NET...
+  `ToActionResult` is an extension method that converts `ArturRios.Output` envelopes — `DataOutput<T>`, `ProcessOutput`, and `PaginatedOutput<T>` — into ASP.NET...
 ---
 
-`ResponseResolver` is a static class that converts `ArturRios.Output` envelopes — `DataOutput<T>`,
+`ToActionResult` is an extension method (in `OutputActionResultExtensions`, namespace
+`ArturRios.Util.WebApi.AspNetCore`) that converts `ArturRios.Output` envelopes — `DataOutput<T>`,
 `ProcessOutput`, and `PaginatedOutput<T>` — into ASP.NET Core `ActionResult`s, so a controller action
 never has to hand-pick a status code for the happy and unhappy paths itself.
 
-## `Resolve` overloads
+`ToActionResult` replaces the static `ResponseResolver.Resolve(output, ...)`, which was removed in 5.0.0
+with no change in behavior: replace each `ResponseResolver.Resolve(output, ...)` call with
+`output.ToActionResult(...)`.
 
-`ResponseResolver.Resolve` has three overloads, one per envelope type:
+## `ToActionResult` overloads
+
+`ToActionResult` has three overloads, one per envelope type:
 
 | Overload | Returns |
 |---|---|
-| `Resolve<T>(DataOutput<T?> dataOutput, int? statusCode = null)` | `ActionResult<DataOutput<T?>>` |
-| `Resolve(ProcessOutput processOutput, int? statusCode = null)` | `ActionResult<ProcessOutput>` |
-| `Resolve<T>(PaginatedOutput<T> paginatedOutput, int? statusCode = null)` | `ActionResult<PaginatedOutput<T>>` |
+| `ToActionResult<T>(this DataOutput<T?> dataOutput, int? statusCode = null, statusMap = null)` | `ActionResult<DataOutput<T?>>` |
+| `ToActionResult(this ProcessOutput processOutput, int? statusCode = null, statusMap = null)` | `ActionResult<ProcessOutput>` |
+| `ToActionResult<T>(this PaginatedOutput<T> paginatedOutput, int? statusCode = null, statusMap = null)` | `ActionResult<PaginatedOutput<T>>` |
 
 Each wraps the envelope in an `ObjectResult` whose `StatusCode` is set from the resolved status code —
 none of the three re-shape or otherwise touch the envelope itself; the body returned to the client is the
@@ -40,9 +45,13 @@ resolves its status the same way:
 The caller owns the dictionary, so its key comparer controls matching — build it with
 `StringComparer.OrdinalIgnoreCase` for case-insensitive keys.
 
+The same resolution is exposed on its own as `output.ResolveStatusCode(statusCode?, statusMap?)`, which
+returns the `int` status without building an `ActionResult` — useful when the envelope is written some
+other way.
+
 ```mermaid
 flowchart LR
-    Output["DataOutput / ProcessOutput / PaginatedOutput"] --> Resolve["ResponseResolver.Resolve(output, statusCode?, statusMap?)"]
+    Output["DataOutput / ProcessOutput / PaginatedOutput"] --> Resolve["output.ToActionResult(statusCode?, statusMap?)"]
     Resolve --> HasCode{"statusCode supplied?"}
     HasCode -- "yes" --> UseCode["Use statusCode as-is"]
     HasCode -- "no" --> HasMap{"statusMap supplied?"}
@@ -68,26 +77,26 @@ var statusMap = new Dictionary<string, int>
     ["Email already registered"] = 409,
 };
 
-return ResponseResolver.Resolve(output, statusMap: statusMap);
+return output.ToActionResult(statusMap: statusMap);
 ```
 
 This means a failed operation that should still return, say, a 404 or 409 rather than a generic 400 just
 needs an explicit `statusCode`:
 
 ```csharp
-return ResponseResolver.Resolve(output, statusCode: 404);
+return output.ToActionResult(statusCode: 404);
 ```
 
 ## Pairing with the envelopes
 
-`ResponseResolver` is the last stop for the "envelopes, not exceptions" pattern the rest of the library
+`ToActionResult` is the last stop for the "envelopes, not exceptions" pattern the rest of the library
 follows (see [Architecture](../architecture/)): application code builds a `ProcessOutput` or
-`DataOutput<T>` (`WithData`, `WithError`, etc.) to describe what happened, and `ResponseResolver` is the
+`DataOutput<T>` (`WithData`, `WithError`, etc.) to describe what happened, and `ToActionResult` is the
 single place that decides how that maps onto the HTTP response — so success and failure both flow through
 the same, predictable shape instead of being scattered across `Ok(...)`/`BadRequest(...)`/`NotFound(...)`
-calls in every action. It pairs naturally with `AddCustomInvalidModelStateResponse()` (see
+calls in every action. It pairs naturally with `AddInvalidModelStateEnvelope()` (see
 [Configuration](../configuration/)), which shapes ASP.NET Core's own model-validation 400 as a
-`DataOutput<string>` so it looks identical to a `Resolve`d failure.
+`DataOutput<string>` so it looks identical to a failure returned through `ToActionResult`.
 
 ## Controller-action example
 
@@ -97,19 +106,19 @@ public ActionResult<DataOutput<UserDto?>> GetById(int id)
 {
     DataOutput<UserDto?> output = _userService.GetById(id);
 
-    return ResponseResolver.Resolve(output);
+    return output.ToActionResult();
 }
 ```
 
 `_userService.GetById` returns a `DataOutput<UserDto?>` whose `Success` reflects whether the user was
-found; `ResponseResolver.Resolve` turns that straight into a 200 with the user payload or a 400 with the
+found; `ToActionResult` turns that straight into a 200 with the user payload or a 400 with the
 service's error messages, with no branching in the action itself.
 
 ## Where to next
 
-- **[Architecture](../architecture/)** — where `ResponseResolver` sits at the end of the request pipeline,
+- **[Architecture](../architecture/)** — where `ToActionResult` sits at the end of the request pipeline,
   and the envelope class hierarchy (`ProcessOutput` → `DataOutput<T>` → `PaginatedOutput<T>`).
-- **[Configuration](../configuration/)** — `AddCustomInvalidModelStateResponse()`, which shapes validation
+- **[Configuration](../configuration/)** — `AddInvalidModelStateEnvelope()`, which shapes validation
   failures the same way.
 - **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — `ExceptionMiddleware`, which returns the
-  same `DataOutput<string>` shape for unhandled exceptions that never reach a `Resolve` call.
+  same `DataOutput<string>` shape for unhandled exceptions that never reach a `ToActionResult` call.

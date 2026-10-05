@@ -200,6 +200,52 @@ public class AuthenticationMiddlewareTests
     }
 
     [Fact]
+    public async Task GivenNoToken_WhenAuthenticating_ThenUnauthorizedSaysTheTokenIsMissing()
+    {
+        var options = new AuthenticationOptions();
+        var (context, log) = BuildContext(headerToken: null, provider: null);
+        var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Empty(log.ToString());
+        Assert.Contains("Authentication token not provided", await ReadBody(context));
+    }
+
+    [Fact]
+    public async Task GivenAnEndpointMarkedWithAspNetCoreAllowAnonymous_WhenAuthenticating_ThenValidationIsSkipped()
+    {
+        var options = new AuthenticationOptions();
+        var (context, log) = BuildContext(headerToken: null, provider: null);
+        context.SetEndpoint(new Endpoint(_ => Task.CompletedTask,
+            new EndpointMetadataCollection(new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute()), "anon"));
+        var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [Jwt(options)]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+    }
+
+    private sealed class TokenlessValidator : ITokenValidator
+    {
+        public Task<TokenValidationResult> ValidateAsync(string token, HttpContext context) =>
+            Task.FromResult(new TokenValidationResult(new AuthenticatedUser(UserId, 1), null));
+    }
+
+    [Fact]
+    public async Task GivenNoTokenAndAValidatorThatNeedsNone_WhenAuthenticating_ThenTheValidatorStillRuns()
+    {
+        var options = new AuthenticationOptions();
+        var (context, log) = BuildContext(headerToken: null, provider: null);
+        var middleware = Middleware(_ => { log.Append("next"); return Task.CompletedTask; }, options, [new TokenlessValidator()]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+    }
+
+    [Fact]
     public async Task GivenAnAnonymousEndpoint_WhenAuthenticating_ThenValidationIsSkipped()
     {
         var options = new AuthenticationOptions();

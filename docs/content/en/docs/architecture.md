@@ -11,9 +11,11 @@ security model, the response envelope, and the design principles that hold them 
 ## Request pipeline
 
 The library is a thin layer around the standard ASP.NET Core pipeline. `WebApiStartup` builds the
-`WebApplicationBuilder`/`WebApplication` and exposes `AddMiddlewares(Type[])`, which registers each given
-middleware type on the app **in the order supplied**, skipping any type that isn't a `WebApiMiddleware`.
-A typical setup registers the three built-in middlewares in this order:
+`WebApplicationBuilder`/`WebApplication` through one standard sequence, whose pipeline half adds the three
+built-in middlewares with `UseStandardMiddlewares()` — `AuthenticationMiddleware` only when
+`AddTokenAuthentication` was registered, with Swagger and CORS (when enabled) served just before it — then
+any extra middlewares from `WebApiStartupOptions.Middlewares`,
+then the controllers:
 
 ```mermaid
 flowchart LR
@@ -21,19 +23,27 @@ flowchart LR
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
     Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches IAuthenticatedUser</i>"]
     Auth --> Endpoint["Controller / endpoint"]
-    Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
+    Endpoint --> Resolver["ToActionResult<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
 ```
 
 `WebApiMiddleware` is an abstract marker base class with no members — its only job is to let
-`AddMiddlewares` recognize which types are safe to register with `App.UseMiddleware(...)`:
+`UseWebApiMiddlewares` (which `WebApiStartup` runs over `Options.Middlewares`) recognize which types are
+safe to register with `app.UseMiddleware(...)`. It registers each type **in the order supplied**, and
+throws an `ArgumentException` for any type that isn't a `WebApiMiddleware`:
 
 ```csharp
-AddMiddlewares([
-    typeof(TraceActivityMiddleware),
-    typeof(ExceptionMiddleware),
-    typeof(AuthenticationMiddleware)
-]);
+public class Startup(string[] args) : WebApiStartup(args, options =>
+{
+    options.Middlewares.Add(typeof(MyMiddleware)); // runs after the three built-in ones
+})
+{
+    // ...
+}
+
+// or, on a plain WebApplication:
+app.UseStandardMiddlewares();
+app.UseWebApiMiddlewares(typeof(MyMiddleware));
 ```
 
 Because registration order is registration order, `TraceActivityMiddleware` runs first so the trace id
@@ -77,7 +87,7 @@ flowchart TB
     ProviderEmail --> Items
 
     Items --> Authorize["AuthorizeAttribute<br/><i>401 if no user</i>"]
-    Authorize --> RoleReq["RoleRequirementFilter<br/><i>403 if role not authorized</i>"]
+    Authorize --> RoleReq["RoleRequirementFilter<br/><i>401 if no user, 403 if role not authorized</i>"]
     RoleReq --> Endpoint["Controller action"]
 ```
 
@@ -93,8 +103,8 @@ any `IAuthenticationProvider` (registered via `AddCachedAuthenticationProvider<T
 lookups of the same user within a short TTL, without any mode needing to know it's there.
 
 `AuthorizeAttribute` and `RoleRequirementFilter` both read the same `HttpContext.Items["User"]` slot that
-`AuthenticationMiddleware` populates, and both honor `[AllowAnonymous]` by short-circuiting before checking
-it.
+`AuthenticationMiddleware` populates, and both honor `[AllowAnonymous]` — the library's or ASP.NET Core's
+own, on the action or the controller — by short-circuiting before checking it.
 
 See [Security](../security/) for the full authentication and authorization reference.
 
@@ -124,7 +134,7 @@ classDiagram
     DataOutput <|-- PaginatedOutput
 ```
 
-`ResponseResolver.Resolve(...)` maps any of `ProcessOutput`, `DataOutput<T>` or `PaginatedOutput<T>` onto
+The `ToActionResult(...)` extension maps any of `ProcessOutput`, `DataOutput<T>` or `PaginatedOutput<T>` onto
 an `ActionResult`, defaulting the HTTP status to 200 when `Success` is `true` and 400 otherwise, unless an
 explicit `statusCode` is supplied:
 
@@ -134,7 +144,7 @@ public ActionResult<DataOutput<UserDto?>> GetById(int id)
 {
     DataOutput<UserDto?> output = _userService.GetById(id);
 
-    return ResponseResolver.Resolve(output);
+    return output.ToActionResult();
 }
 ```
 
@@ -143,17 +153,21 @@ See [Responses](../responses/) for the full mapping reference.
 ## Design principles
 
 - **Envelopes, not exceptions.** Endpoints report failure through `ProcessOutput`/`DataOutput<T>` and let
-  `ResponseResolver` pick the status code; `ExceptionMiddleware` is the safety net for anything that still
+  `ToActionResult` pick the status code; `ExceptionMiddleware` is the safety net for anything that still
   escapes as a thrown exception, not the primary error-reporting path.
 - **Stateless by default, revalidating when you need it.** `JwtValidationMode.ClaimsOnly` is the default
   because most requests don't need a fresh database read on every call; `Revalidate` (optionally cached)
   is there for the cases where staleness — instead of an expired token — is the risk you can't accept.
 - **Small, focused middlewares.** Each of `TraceActivityMiddleware`, `ExceptionMiddleware` and
   `AuthenticationMiddleware` does exactly one thing and derives from the `WebApiMiddleware` marker so it
-  can be composed via `AddMiddlewares` in whatever order a given host needs.
+  can be composed via `UseWebApiMiddlewares` in whatever order a given host needs.
 - **Consistent `InvokeAsync`.** Every middleware follows the standard ASP.NET Core convention — a
   constructor capturing `RequestDelegate next` plus other dependencies, and a single `InvokeAsync(HttpContext)`
-  method — so custom middlewares slot into `AddMiddlewares` the same way the built-in ones do.
+  method — so custom middlewares slot into `WebApiStartupOptions.Middlewares` (or `UseWebApiMiddlewares`)
+  the same way the built-in ones do.
+- **Opinionated, but not locked in.** `WebApiStartup` runs one standard sequence and asks only for
+  `ConfigureServices`; every step of that sequence is also a public extension method, so a host that needs
+  a different order composes the same pieces on a plain `WebApplicationBuilder`.
 - **DI-first.** Dependencies such as `IAuthenticationProvider`, `AuthenticationOptions`, the
   `ITokenValidator`s and `SettingsProvider` are resolved through the container (constructor injection or,
   for per-request freshness, `HttpContext.RequestServices`) rather than passed around manually.
@@ -165,6 +179,6 @@ See [Responses](../responses/) for the full mapping reference.
 - **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — exception handling and distributed
   tracing.
 - **[HTTP Client](../http-client/)** — building typed clients on top of `BaseWebApiClient`.
-- **[Responses](../responses/)** — the full `ResponseResolver` mapping reference.
+- **[Responses](../responses/)** — the full `ToActionResult` mapping reference.
 - **[Endpoint Toggling](../endpoint-toggle/)** — enabling or disabling individual endpoints from code or
   configuration.

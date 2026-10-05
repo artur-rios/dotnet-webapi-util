@@ -117,7 +117,7 @@ public class EndpointToggleConcurrencyTests
         var result = Assert.IsType<ObjectResult>(context.Result);
         var output = Assert.IsType<ProcessOutput>(result.Value);
 
-        Assert.Contains(message, output.Messages);
+        Assert.Contains(message, output.Errors);
     }
 
     [Fact]
