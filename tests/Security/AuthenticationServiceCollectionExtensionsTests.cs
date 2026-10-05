@@ -102,4 +102,31 @@ public class AuthenticationServiceCollectionExtensionsTests
         var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IAuthenticatedUserMapper));
         Assert.Equal(typeof(StubMapper), descriptor.ImplementationType);
     }
+
+    [Fact]
+    public void GivenTokenAuthenticationIsAddedTwice_WhenInspected_ThenTheJwtValidatorIsRegisteredOnce()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTokenAuthentication(_ => { });
+        services.AddTokenAuthentication(_ => { });
+
+        Assert.Single(services, d => d.ServiceType == typeof(ITokenValidator));
+    }
+
+    [Fact]
+    public void GivenANonPositiveCacheTtl_WhenAddingTheCachedProvider_ThenRegistrationFails()
+    {
+        var services = new ServiceCollection();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            services.AddCachedAuthenticationProvider<NoUserProvider>(options => options.Ttl = TimeSpan.Zero));
+    }
+
+    private sealed class NoUserProvider : IAuthenticationProvider
+    {
+        public IAuthenticatedUser? GetAuthenticatedUserById(Guid id) => null;
+
+        public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
+    }
 }

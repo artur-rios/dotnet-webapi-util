@@ -1,3 +1,4 @@
+using ArturRios.Output;
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Filters;
 using ArturRios.Util.WebApi.Security.Interfaces;
@@ -52,7 +53,7 @@ public class RoleRequirementFilterTests
     }
 
     [Fact]
-    public void GivenAProtectedEndpointAndNoUser_WhenCheckingTheRole_ThenForbiddenIsReturned()
+    public void GivenAProtectedEndpointAndNoUser_WhenCheckingTheRole_ThenUnauthorizedIsReturned()
     {
         var context = BuildContext(null, allowAnonymous: false);
         var filter = new RoleRequirementFilter(AuthorizedRole);
@@ -60,7 +61,21 @@ public class RoleRequirementFilterTests
         filter.OnAuthorization(context);
 
         var result = Assert.IsType<ObjectResult>(context.Result);
-        Assert.Equal(403, result.StatusCode);
+        Assert.Equal(401, result.StatusCode);
+        Assert.False(Assert.IsType<ProcessOutput>(result.Value).Success);
+    }
+
+    [Fact]
+    public void GivenAnActionMarkedWithAspNetCoreAllowAnonymous_WhenCheckingTheRole_ThenTheRequestIsAllowedThrough()
+    {
+        var context = BuildContext(null, allowAnonymous: false);
+        context.ActionDescriptor.EndpointMetadata =
+            new List<object> { new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute() };
+        var filter = new RoleRequirementFilter(AuthorizedRole);
+
+        filter.OnAuthorization(context);
+
+        Assert.Null(context.Result);
     }
 
     [Fact]

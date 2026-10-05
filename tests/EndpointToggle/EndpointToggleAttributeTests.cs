@@ -46,7 +46,7 @@ public class EndpointToggleAttributeTests
     }
 
     [Fact]
-    public void GivenDisabledToggleWithObjectOutput_WhenActionExecuting_ThenReturnsProcessOutputWithMessageAndStatusCode()
+    public void GivenDisabledToggleWithObjectOutput_WhenActionExecuting_ThenReturnsAFailedProcessOutputWithTheMessageAndStatusCode()
     {
         var context = BuildContext(nameof(SampleController.IntAction));
         var attribute = new EndpointToggleAttribute(
@@ -60,7 +60,8 @@ public class EndpointToggleAttributeTests
         var result = Assert.IsType<ObjectResult>(context.Result);
         Assert.Equal((int)HttpStatusCode.Forbidden, result.StatusCode);
         var output = Assert.IsType<ProcessOutput>(result.Value);
-        Assert.Contains("Temporarily off", output.Messages);
+        Assert.Contains("Temporarily off", output.Errors);
+        Assert.False(output.Success);
     }
 
     [Fact]
@@ -124,6 +125,51 @@ public class EndpointToggleAttributeTests
 
         var exception = Assert.Throws<EndpointDisabledException>(() => attribute.OnActionExecuting(context));
         Assert.Contains(EndpointToggleAttribute.DefaultDisabledMessage, exception.Messages);
+    }
+
+    [Fact]
+    public void GivenDisabledToggleWithExceptionOutput_WhenActionExecuting_ThenTheExceptionCarriesTheDisabledStatusCode()
+    {
+        var context = BuildContext(nameof(SampleController.IntAction));
+        var attribute = new EndpointToggleAttribute(
+            isEnabled: false,
+            disabledStatusCode: HttpStatusCode.ServiceUnavailable,
+            disabledOutputType: OutputType.Exception);
+
+        var exception = Assert.Throws<EndpointDisabledException>(() => attribute.OnActionExecuting(context));
+        Assert.Equal((int)HttpStatusCode.ServiceUnavailable, exception.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(nameof(SampleController.TaskIntAction))]
+    [InlineData(nameof(SampleController.ValueTaskIntAction))]
+    [InlineData(nameof(SampleController.ActionResultIntAction))]
+    [InlineData(nameof(SampleController.TaskActionResultIntAction))]
+    public void GivenDisabledToggleWithDefaultOutputAndAWrappedValueTypeReturn_WhenActionExecuting_ThenReturnsTheWrappedTypesDefault(
+        string actionName)
+    {
+        var context = BuildContext(actionName);
+        var attribute = new EndpointToggleAttribute(isEnabled: false, disabledOutputType: OutputType.Default);
+
+        attribute.OnActionExecuting(context);
+
+        var result = Assert.IsType<ObjectResult>(context.Result);
+        Assert.Equal(0, result.Value);
+    }
+
+    [Theory]
+    [InlineData(nameof(SampleController.TaskAction))]
+    [InlineData(nameof(SampleController.ValueTaskAction))]
+    public void GivenDisabledToggleWithDefaultOutputAndAnAsyncVoidReturn_WhenActionExecuting_ThenReturnsStatusCodeResult(
+        string actionName)
+    {
+        var context = BuildContext(actionName);
+        var attribute = new EndpointToggleAttribute(isEnabled: false, disabledOutputType: OutputType.Default);
+
+        attribute.OnActionExecuting(context);
+
+        var result = Assert.IsType<StatusCodeResult>(context.Result);
+        Assert.Equal((int)HttpStatusCode.NotFound, result.StatusCode);
     }
 
     // ---- App settings toggle ----
@@ -342,5 +388,17 @@ public class EndpointToggleAttributeTests
         public void VoidAction()
         {
         }
+
+        public Task<int> TaskIntAction() => Task.FromResult(0);
+
+        public ValueTask<int> ValueTaskIntAction() => ValueTask.FromResult(0);
+
+        public ActionResult<int> ActionResultIntAction() => 0;
+
+        public Task<ActionResult<int>> TaskActionResultIntAction() => Task.FromResult<ActionResult<int>>(0);
+
+        public Task TaskAction() => Task.CompletedTask;
+
+        public ValueTask ValueTaskAction() => ValueTask.CompletedTask;
     }
 }

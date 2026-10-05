@@ -11,8 +11,9 @@ security model, the response envelope, and the design principles that hold them 
 ## Request pipeline
 
 The library is a thin layer around the standard ASP.NET Core pipeline. `WebApiStartup` builds the
-`WebApplicationBuilder`/`WebApplication` and exposes `AddMiddlewares(Type[])`, which registers each given
-middleware type on the app **in the order supplied**, skipping any type that isn't a `WebApiMiddleware`.
+`WebApplicationBuilder`/`WebApplication` and exposes `AddMiddlewares(params Type[])`, which registers each
+given middleware type on the app **in the order supplied** (through `App.UseWebApiMiddlewares(...)`), and
+throws an `ArgumentException` for any type that isn't a `WebApiMiddleware`.
 A typical setup registers the three built-in middlewares in this order:
 
 ```mermaid
@@ -21,12 +22,13 @@ flowchart LR
     Trace --> Exception["ExceptionMiddleware<br/><i>catches unhandled exceptions</i>"]
     Exception --> Auth["AuthenticationMiddleware<br/><i>validates token, attaches IAuthenticatedUser</i>"]
     Auth --> Endpoint["Controller / endpoint"]
-    Endpoint --> Resolver["ResponseResolver<br/><i>Output envelope → ActionResult</i>"]
+    Endpoint --> Resolver["ToActionResult<br/><i>Output envelope → ActionResult</i>"]
     Resolver --> Client
 ```
 
 `WebApiMiddleware` is an abstract marker base class with no members — its only job is to let
-`AddMiddlewares` recognize which types are safe to register with `App.UseMiddleware(...)`:
+`AddMiddlewares` (and `UseWebApiMiddlewares`) recognize which types are safe to register with
+`App.UseMiddleware(...)`:
 
 ```csharp
 AddMiddlewares([
@@ -77,7 +79,7 @@ flowchart TB
     ProviderEmail --> Items
 
     Items --> Authorize["AuthorizeAttribute<br/><i>401 if no user</i>"]
-    Authorize --> RoleReq["RoleRequirementFilter<br/><i>403 if role not authorized</i>"]
+    Authorize --> RoleReq["RoleRequirementFilter<br/><i>401 if no user, 403 if role not authorized</i>"]
     RoleReq --> Endpoint["Controller action"]
 ```
 
@@ -93,8 +95,8 @@ any `IAuthenticationProvider` (registered via `AddCachedAuthenticationProvider<T
 lookups of the same user within a short TTL, without any mode needing to know it's there.
 
 `AuthorizeAttribute` and `RoleRequirementFilter` both read the same `HttpContext.Items["User"]` slot that
-`AuthenticationMiddleware` populates, and both honor `[AllowAnonymous]` by short-circuiting before checking
-it.
+`AuthenticationMiddleware` populates, and both honor `[AllowAnonymous]` — the library's or ASP.NET Core's
+own, on the action or the controller — by short-circuiting before checking it.
 
 See [Security](../security/) for the full authentication and authorization reference.
 
@@ -124,7 +126,7 @@ classDiagram
     DataOutput <|-- PaginatedOutput
 ```
 
-`ResponseResolver.Resolve(...)` maps any of `ProcessOutput`, `DataOutput<T>` or `PaginatedOutput<T>` onto
+The `ToActionResult(...)` extension maps any of `ProcessOutput`, `DataOutput<T>` or `PaginatedOutput<T>` onto
 an `ActionResult`, defaulting the HTTP status to 200 when `Success` is `true` and 400 otherwise, unless an
 explicit `statusCode` is supplied:
 
@@ -134,7 +136,7 @@ public ActionResult<DataOutput<UserDto?>> GetById(int id)
 {
     DataOutput<UserDto?> output = _userService.GetById(id);
 
-    return ResponseResolver.Resolve(output);
+    return output.ToActionResult();
 }
 ```
 
@@ -143,7 +145,7 @@ See [Responses](../responses/) for the full mapping reference.
 ## Design principles
 
 - **Envelopes, not exceptions.** Endpoints report failure through `ProcessOutput`/`DataOutput<T>` and let
-  `ResponseResolver` pick the status code; `ExceptionMiddleware` is the safety net for anything that still
+  `ToActionResult` pick the status code; `ExceptionMiddleware` is the safety net for anything that still
   escapes as a thrown exception, not the primary error-reporting path.
 - **Stateless by default, revalidating when you need it.** `JwtValidationMode.ClaimsOnly` is the default
   because most requests don't need a fresh database read on every call; `Revalidate` (optionally cached)
@@ -165,6 +167,6 @@ See [Responses](../responses/) for the full mapping reference.
 - **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — exception handling and distributed
   tracing.
 - **[HTTP Client](../http-client/)** — building typed clients on top of `BaseWebApiClient`.
-- **[Responses](../responses/)** — the full `ResponseResolver` mapping reference.
+- **[Responses](../responses/)** — the full `ToActionResult` mapping reference.
 - **[Endpoint Toggling](../endpoint-toggle/)** — enabling or disabling individual endpoints from code or
   configuration.

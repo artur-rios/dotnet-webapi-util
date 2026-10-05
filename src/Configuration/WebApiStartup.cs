@@ -3,12 +3,14 @@ using ArturRios.Configuration.Loaders;
 using ArturRios.Configuration.Providers;
 using ArturRios.Extensions;
 using ArturRios.Output;
+using ArturRios.Util.WebApi.Extensions;
 using ArturRios.Util.WebApi.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -24,35 +26,12 @@ namespace ArturRios.Util.WebApi.Configuration;
 /// <param name="args">The command-line arguments passed to the application entry point.</param>
 public abstract class WebApiStartup(string[] args)
 {
-    private readonly Action<SwaggerGenOptions> _swaggerGenJwtAuthentication = setup =>
-    {
-        var jwtSecurityScheme = new OpenApiSecurityScheme
-        {
-            BearerFormat = "JWT",
-            Name = "JWT Authentication",
-            In = ParameterLocation.Header,
-            Type = SecuritySchemeType.Http,
-            Scheme = JwtBearerDefaults.AuthenticationScheme,
-            Description =
-                "After getting a token from the Authentication route, put **_ONLY_** your JWT Bearer token on textbox below"
-        };
-
-        var jwtRequirement = new OpenApiSecurityRequirement
-        {
-            { new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme), [] }
-        };
-
-        setup.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, jwtSecurityScheme);
-        setup.AddSecurityRequirement(_ => jwtRequirement);
-    };
-
-    /// <summary>The builder used to configure services before the application is built.</summary>
-    protected readonly WebApplicationBuilder Builder = WebApplication.CreateBuilder(args);
-
     /// <summary>The startup parameters parsed from the command-line arguments.</summary>
     protected readonly WebApiParameters Parameters = new(args);
 
-    private SettingsProvider _settings = null!;
+    /// <summary>The builder used to configure services before the application is built. Its environment is
+    /// <see cref="WebApiParameters.EnvironmentName"/> when one was supplied.</summary>
+    protected readonly WebApplicationBuilder Builder = WebApplication.CreateBuilder(CreateOptions(args));
 
     /// <summary>The built application. Populated by <see cref="BuildApp"/>.</summary>
     protected WebApplication App = null!;
@@ -61,7 +40,16 @@ public abstract class WebApiStartup(string[] args)
     public abstract void Build();
 
     /// <summary>Runs the built application, blocking until it shuts down.</summary>
-    public void Run() => App.Run();
+    /// <exception cref="InvalidOperationException"><see cref="BuildApp"/> has not been called.</exception>
+    public void Run()
+    {
+        if (App is null)
+        {
+            throw new InvalidOperationException($"Call {nameof(BuildApp)} before {nameof(Run)}.");
+        }
+
+        App.Run();
+    }
 
     /// <summary>Calls <see cref="Build"/> followed by <see cref="Run"/>.</summary>
     public void BuildAndRun()
@@ -92,7 +80,8 @@ public abstract class WebApiStartup(string[] args)
     public virtual void StartServices() { }
 
     /// <summary>Loads application settings and/or the environment file according to <see cref="Parameters"/>,
-    /// and registers the resulting <see cref="SettingsProvider"/>/<see cref="EnvironmentProvider"/> as services.</summary>
+    /// and registers <see cref="SettingsProvider"/> (always, since <c>AuthenticationMiddleware</c> depends on it)
+    /// and <see cref="EnvironmentProvider"/> (when the environment file is loaded) as services.</summary>
     public void LoadConfiguration()
     {
         Builder.Services.AddSingleton(sp =>
@@ -106,13 +95,11 @@ public abstract class WebApiStartup(string[] args)
 
         SetSwaggerConfigFromParameters();
 
-        _settings = new SettingsProvider(Builder.Configuration);
+        Builder.Services.TryAddSingleton<SettingsProvider>();
 
         if (Parameters.UseAppSettings)
         {
             configurationLoader.LoadAppSettings();
-
-            Builder.Services.AddSingleton<SettingsProvider>();
         }
 
         if (Parameters.UseEnvFile)
@@ -123,19 +110,10 @@ public abstract class WebApiStartup(string[] args)
         }
     }
 
-    /// <summary>Registers each given middleware type on the application pipeline, skipping any type that does
-    /// not derive from <see cref="WebApiMiddleware"/>.</summary>
+    /// <summary>Registers each given middleware type on the application pipeline, in order.</summary>
     /// <param name="middlewares">The middleware types to register, in pipeline order.</param>
-    public void AddMiddlewares(Type[] middlewares)
-    {
-        foreach (var middleware in middlewares)
-        {
-            if (middleware.IsSubclassOf(typeof(WebApiMiddleware)))
-            {
-                App.UseMiddleware(middleware);
-            }
-        }
-    }
+    /// <exception cref="ArgumentException">A type does not derive from <see cref="WebApiMiddleware"/>.</exception>
+    public void AddMiddlewares(params Type[] middlewares) => App.UseWebApiMiddlewares(middlewares);
 
     /// <summary>Replaces ASP.NET Core's default invalid-model-state response with a 400 result carrying a
     /// <see cref="DataOutput{T}"/> whose errors list each invalid parameter and its message.</summary>
@@ -156,62 +134,33 @@ public abstract class WebApiStartup(string[] args)
             };
         });
 
-    /// <summary>Enables the Swagger middleware (JSON endpoint and UI) when the current environment is allowed,
-    /// as determined by <paramref name="allowedEnvironments"/>, <see cref="WebApiParameters.GetSwaggerEnvironments"/>,
-    /// or <see cref="AppSettingsKeys.SwaggerEnabled"/>, in that order of precedence.</summary>
+    /// <summary>Enables the Swagger middleware (JSON endpoint and UI) when Swagger is allowed in the current
+    /// environment (see <see cref="IsSwaggerAllowed"/>), and marks it enabled under
+    /// <see cref="AppSettingsKeys.SwaggerEnabled"/> so <c>AuthenticationMiddleware</c> lets <c>/swagger</c> through.</summary>
     /// <param name="allowedEnvironments">Optional explicit list of environments in which Swagger should be served.</param>
     public void UseSwagger(EnvironmentType[]? allowedEnvironments = null)
     {
-        bool useSwagger;
-        var currentEnv = Builder.Environment.EnvironmentName;
-        var swaggerEnvs = Parameters.GetSwaggerEnvironments();
-
-        if (allowedEnvironments.IsNotEmpty())
-        {
-            useSwagger = allowedEnvironments!.Any(env =>
-                env.ToString().Equals(currentEnv, StringComparison.OrdinalIgnoreCase));
-        }
-        else if (swaggerEnvs.IsNotEmpty())
-        {
-            useSwagger = swaggerEnvs.Contains(currentEnv, StringComparer.OrdinalIgnoreCase);
-        }
-        else
-        {
-            useSwagger = _settings.GetBool(AppSettingsKeys.SwaggerEnabled) ?? false;
-        }
-
-        if (!useSwagger)
+        if (!IsSwaggerAllowed(allowedEnvironments))
         {
             return;
         }
+
+        MarkSwaggerEnabled();
 
         App.UseSwagger();
         App.UseSwaggerUI();
     }
 
-    /// <summary>Registers the Swagger generator (<c>AddSwaggerGen</c>) when the current environment is allowed,
-    /// optionally applying custom <see cref="SwaggerGenOptions"/> and/or JWT bearer security definitions.</summary>
+    /// <summary>Registers the Swagger generator (<c>AddSwaggerGen</c>) when Swagger is allowed in the current
+    /// environment (see <see cref="IsSwaggerAllowed"/>), optionally applying custom <see cref="SwaggerGenOptions"/>
+    /// and/or JWT bearer security definitions.</summary>
     /// <param name="allowedEnvironments">Optional explicit list of environments in which Swagger docs should be generated.</param>
     /// <param name="swaggerGenOptions">Optional callback to further configure <see cref="SwaggerGenOptions"/>.</param>
     /// <param name="jwtAuthentication">Whether to add a JWT bearer security definition/requirement to the generated docs.</param>
     public void UseSwaggerGen(EnvironmentType[]? allowedEnvironments = null,
         Action<SwaggerGenOptions>? swaggerGenOptions = null, bool jwtAuthentication = false)
     {
-        var useSwaggerDocs = false;
-        var currentEnv = Builder.Environment.EnvironmentName;
-        var swaggerEnvs = Parameters.GetSwaggerEnvironments();
-
-        if (allowedEnvironments.IsNotEmpty())
-        {
-            useSwaggerDocs = allowedEnvironments!.Any(env =>
-                env.ToString().Equals(currentEnv, StringComparison.OrdinalIgnoreCase));
-        }
-        else if (swaggerEnvs.IsNotEmpty())
-        {
-            useSwaggerDocs = swaggerEnvs.Contains(currentEnv, StringComparer.OrdinalIgnoreCase);
-        }
-
-        if (!useSwaggerDocs)
+        if (!IsSwaggerAllowed(allowedEnvironments))
         {
             return;
         }
@@ -222,22 +171,79 @@ public abstract class WebApiStartup(string[] args)
 
             if (jwtAuthentication)
             {
-                _swaggerGenJwtAuthentication.Invoke(options);
+                AddJwtSecurity(options);
             }
         });
+    }
+
+    /// <summary>Whether Swagger is allowed in the current environment. Never when the <c>EnableSwaggerDocs:false</c>
+    /// argument was supplied; otherwise when the environment is in <paramref name="allowedEnvironments"/>, if
+    /// non-empty, or else in <see cref="WebApiParameters.GetSwaggerEnvironments"/> (the <c>SwaggerEnvironments</c>
+    /// argument, falling back to <c>Development</c> and <c>Local</c>).</summary>
+    /// <param name="allowedEnvironments">Optional explicit list of environments in which Swagger is allowed.</param>
+    protected bool IsSwaggerAllowed(EnvironmentType[]? allowedEnvironments = null)
+    {
+        if (!Parameters.EnableSwaggerDocs)
+        {
+            return false;
+        }
+
+        var currentEnv = Builder.Environment.EnvironmentName;
+
+        var environments = allowedEnvironments.IsNotEmpty()
+            ? allowedEnvironments!.Select(env => env.ToString())
+            : Parameters.GetSwaggerEnvironments();
+
+        return environments.Contains(currentEnv, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static WebApplicationOptions CreateOptions(string[] args)
+    {
+        var environmentName = new WebApiParameters(args).EnvironmentName;
+
+        return new WebApplicationOptions
+        {
+            Args = args,
+            EnvironmentName = string.IsNullOrWhiteSpace(environmentName) ? null : environmentName
+        };
+    }
+
+    private static void AddJwtSecurity(SwaggerGenOptions options)
+    {
+        var jwtSecurityScheme = new OpenApiSecurityScheme
+        {
+            BearerFormat = "JWT",
+            Name = "JWT Authentication",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.Http,
+            Scheme = JwtBearerDefaults.AuthenticationScheme,
+            Description =
+                "After getting a token from the Authentication route, put **_ONLY_** your JWT Bearer token on textbox below"
+        };
+
+        var jwtRequirement = new OpenApiSecurityRequirement
+        {
+            { new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme), [] }
+        };
+
+        options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, jwtSecurityScheme);
+        options.AddSecurityRequirement(_ => jwtRequirement);
     }
 
     private void SetSwaggerConfigFromParameters()
     {
         var currentEnv = Builder.Environment.EnvironmentName;
 
-        if (!Parameters.SwaggerEnvironments.Contains(currentEnv, StringComparer.OrdinalIgnoreCase))
+        if (!Parameters.EnableSwaggerDocs ||
+            !Parameters.SwaggerEnvironments.Contains(currentEnv, StringComparer.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var configValues = new Dictionary<string, string?> { [AppSettingsKeys.SwaggerEnabled] = "true" };
-
-        Builder.Configuration.AddInMemoryCollection(configValues);
+        MarkSwaggerEnabled();
     }
+
+    private void MarkSwaggerEnabled() =>
+        Builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?> { [AppSettingsKeys.SwaggerEnabled] = "true" });
 }

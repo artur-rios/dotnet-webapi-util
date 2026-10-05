@@ -7,11 +7,11 @@ namespace ArturRios.Util.WebApi.Configuration;
 /// <c>EnableSwaggerDocs:false</c>), controlling how <see cref="WebApiStartup"/> configures the application.</summary>
 public class WebApiParameters
 {
-    private readonly string[] _defaultSwaggerEnvironments =
+    private static readonly string[] DefaultSwaggerEnvironments =
         [nameof(EnvironmentType.Development), nameof(EnvironmentType.Local)];
 
-    /// <summary>Parses <paramref name="args"/> into the corresponding properties. Unrecognized or malformed
-    /// entries are ignored, leaving the default values in place.</summary>
+    /// <summary>Parses <paramref name="args"/> into the corresponding properties. Keys are case-insensitive;
+    /// unrecognized or malformed entries are ignored, leaving the default values in place.</summary>
     /// <param name="args">The command-line arguments, each in <c>Key:Value</c> form.</param>
     public WebApiParameters(string[] args)
     {
@@ -29,29 +29,29 @@ public class WebApiParameters
                 continue;
             }
 
-            var key = parts[0].Trim();
-            var value = parts[1].Trim();
+            var key = parts[0];
+            var value = parts[1];
 
-            switch (key)
+            switch (key.ToLowerInvariant())
             {
-                case "Environment":
+                case "environment":
                     EnvironmentName = value.IsValidEnumValue<EnvironmentType>() ? value : string.Empty;
                     break;
-                case "EnableSwaggerDocs":
+                case "enableswaggerdocs":
                     EnableSwaggerDocs = value.ParseToBoolOrDefault(true)!.Value;
                     break;
-                case "UseAppSetting":
+                case "useappsettings":
+                case "useappsetting":
                     UseAppSettings = value.ParseToBoolOrDefault(true)!.Value;
                     break;
-                case "UseEnvFile":
+                case "useenvfile":
                     UseEnvFile = value.ParseToBoolOrDefault(true)!.Value;
                     break;
-                case "SwaggerEnvironments":
+                case "swaggerenvironments":
                     if (value.StartsWith('[') && value.EndsWith(']'))
                     {
-                        var envs = value.Trim('[', ']').Split(
+                        SwaggerEnvironments = value.Trim('[', ']').Split(
                             ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                        SwaggerEnvironments = envs;
                     }
 
                     break;
@@ -59,18 +59,21 @@ public class WebApiParameters
         }
     }
 
-    /// <summary>The environment name (e.g. <c>Development</c>, <c>Production</c>), if a valid one was supplied.</summary>
+    /// <summary>The environment name (e.g. <c>Development</c>, <c>Production</c>), if a valid one was supplied.
+    /// When set, <see cref="WebApiStartup"/> uses it as the host environment, overriding
+    /// <c>ASPNETCORE_ENVIRONMENT</c>.</summary>
     public string EnvironmentName { get; set; } = string.Empty;
 
-    /// <summary>Whether <c>appsettings.json</c> should be loaded. Defaults to <c>true</c>.</summary>
+    /// <summary>Whether <c>appsettings.json</c> should be loaded. Defaults to <c>true</c>. Parsed from the
+    /// <c>UseAppSettings</c> argument (or its legacy spelling, <c>UseAppSetting</c>).</summary>
     public bool UseAppSettings { get; set; } = true;
 
     /// <summary>Whether a <c>.env</c> file should be loaded. Defaults to <c>true</c>.</summary>
     public bool UseEnvFile { get; set; } = true;
 
-    /// <summary>Parsed from the <c>EnableSwaggerDocs</c> argument. Reserved and not currently consulted by
-    /// <see cref="WebApiStartup"/>; Swagger is gated by environment (see <see cref="SwaggerEnvironments"/> and
-    /// <see cref="GetSwaggerEnvironments"/>). Defaults to <c>true</c>.</summary>
+    /// <summary>Parsed from the <c>EnableSwaggerDocs</c> argument. When <c>false</c>, <see cref="WebApiStartup"/>
+    /// neither generates nor serves Swagger in any environment, whatever <see cref="SwaggerEnvironments"/> says.
+    /// Defaults to <c>true</c>, leaving Swagger gated by environment.</summary>
     public bool EnableSwaggerDocs { get; set; } = true;
 
     /// <summary>The environment names in which Swagger should be enabled, as parsed from the <c>SwaggerEnvironments</c> argument.</summary>
@@ -82,11 +85,11 @@ public class WebApiParameters
     {
         if (SwaggerEnvironments.IsEmpty())
         {
-            return _defaultSwaggerEnvironments;
+            return [.. DefaultSwaggerEnvironments];
         }
 
         var validEnvs = SwaggerEnvironments.Where(env => env.IsValidEnumValue<EnvironmentType>()).ToArray();
 
-        return validEnvs.IsNotEmpty() ? validEnvs : _defaultSwaggerEnvironments;
+        return validEnvs.IsNotEmpty() ? validEnvs : [.. DefaultSwaggerEnvironments];
     }
 }

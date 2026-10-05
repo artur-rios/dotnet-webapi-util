@@ -47,7 +47,7 @@ flowchart TB
     Enabled -- "no" --> Shape["Shape disabled response by OutputType"]
     Shape --> Void["Void → empty status code"]
     Shape --> Default["Default → action's default return value"]
-    Shape --> Object["Object → ProcessOutput envelope"]
+    Shape --> Object["Object → failed ProcessOutput envelope"]
     Shape --> Exception["Exception → throw EndpointDisabledException"]
 ```
 
@@ -95,17 +95,18 @@ When an endpoint is disabled, `disabledOutputType` (an `OutputType`) decides wha
 | `OutputType` | Disabled response | Status code |
 |---|---|---|
 | `Void` | Empty result, no body. | `disabledStatusCode` (default `404`) |
-| `Default` | The action's default return value — `default(T)` for value types, `null` for reference types, or an empty result for `void`. | `disabledStatusCode` (default `404`) |
-| `Object` *(default)* | A `ProcessOutput` envelope carrying `disabledMessage`. | `disabledStatusCode` (default `404`) |
-| `Exception` | Throws `EndpointDisabledException`, handled by the exception pipeline (e.g. [`ExceptionMiddleware`](../middleware-and-diagnostics/)). | Decided by the exception handler |
+| `Default` / `Primitive` | The action's default return value — `default(T)` for value types, `null` for reference types, or an empty result for `void`. `Task<T>`, `ValueTask<T>` and `ActionResult<T>` are unwrapped to `T`; `Task` and `ValueTask` are treated like `void`. | `disabledStatusCode` (default `404`) |
+| `Object` *(default)* | A failed `ProcessOutput` envelope carrying `disabledMessage` under `Errors` (so `success` is `false`). | `disabledStatusCode` (default `404`) |
+| `Exception` | Throws `EndpointDisabledException`, carrying `disabledStatusCode` in its `StatusCode`, handled by the exception pipeline ([`ExceptionMiddleware`](../middleware-and-diagnostics/) answers with that status code). | `disabledStatusCode` (default `404`) when handled by `ExceptionMiddleware`; otherwise decided by the exception handler |
 
 A few details worth knowing:
 
-- `disabledStatusCode` defaults to `404 Not Found` and is honored by the `Void`, `Default` and `Object`
-  shapes whenever the caller provides it.
-- `disabledMessage` (default `"This endpoint is currently disabled"`) is only included by the `Object`
-  shape. The `Exception` shape always carries the default message.
-- `EndpointToggleAttribute.DefaultDisabledStatusCode` and `DefaultDisabledMessage` expose those defaults.
+- `disabledStatusCode` defaults to `404 Not Found` and is honored by every shape: the `Void`, `Default` and
+  `Object` shapes return it directly, and the `Exception` shape carries it on
+  `EndpointDisabledException.StatusCode`.
+- `disabledMessage` (default `"This endpoint is currently disabled"`) is included by the `Object` shape and
+  carried as the `EndpointDisabledException`'s message by the `Exception` shape.
+- `EndpointToggleAttribute.DefaultDisabledMessage` exposes the default message.
 
 ```csharp
 // Disabled requests get a 503 with a ProcessOutput explaining why.

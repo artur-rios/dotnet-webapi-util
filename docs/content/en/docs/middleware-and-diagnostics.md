@@ -14,9 +14,10 @@ referenced in [Architecture](../architecture/) and [Configuration](../configurat
 ## `WebApiMiddleware` and registration order
 
 `WebApiMiddleware` is an abstract marker base class with no members. Its only job is letting
-`WebApiStartup.AddMiddlewares(Type[])` recognize which types it's safe to register with
-`App.UseMiddleware(...)` — any type in the array that isn't a subclass of `WebApiMiddleware` is silently
-skipped. Registration happens **in the order given**:
+`WebApiStartup.AddMiddlewares(params Type[])` (and the `App.UseWebApiMiddlewares(...)` extension it
+delegates to) recognize which types it's safe to register with `App.UseMiddleware(...)` — any type in the
+array that isn't a subclass of `WebApiMiddleware` throws an `ArgumentException`, and nothing is registered.
+Registration happens **in the order given**:
 
 ```csharp
 AddMiddlewares([
@@ -38,26 +39,35 @@ the endpoint itself; `AuthenticationMiddleware` (see [Security](../security/)) r
   while `httpContext.RequestAborted.IsCancellationRequested` is true is logged at **Debug** level
   (`"Request was canceled by the client..."`) and swallowed. No response is written, since there's no
   client left to receive one.
+- **`EndpointDisabledException`** (thrown by [`[EndpointToggle]`](../endpoint-toggle/) with the
+  `Exception` output type) is logged at **Information** level and answered with the exception's own
+  `StatusCode` — the toggle's `disabledStatusCode` — rather than 500, with its messages in the envelope's
+  `Errors`.
 - **Everything else** falls through to a single structured `logger.LogError(exception, "Unhandled
-  exception while processing the request.")` call, followed by an HTTP 500 response — unless the response
-  has already started or the request was aborted, in which case it logs at Debug and returns without
-  writing anything.
+  exception while processing the request.")` call, followed by an HTTP 500 response — unless the request
+  was aborted, in which case it logs at Debug and returns without writing anything.
+- **Response already started** — if the response has already begun streaming when the exception
+  surfaces, the exception is **rethrown** rather than handled, so the server aborts the response instead
+  of leaving the client with a truncated body that looks complete.
 
-The 500 response body is a JSON `DataOutput<string>` envelope. By default its `Messages` carry a single
+The 500 response body is a JSON `DataOutput<string>` envelope. By default its `Errors` carry a single
 **generic** message — `"Internal server error, please try again later"` — so internal exception details
 are never leaked to the client. The one exception: if the thrown exception is a `CustomException`, its
-own `Messages` are returned instead, letting application code surface a deliberate, safe-to-show error
-through the same envelope shape `ResponseResolver` uses everywhere else (see [Responses](../responses/)).
+own `Messages` are returned in `Errors` instead, letting application code surface a deliberate,
+safe-to-show error through the same envelope shape `ToActionResult` uses everywhere else (see
+[Responses](../responses/)).
 
-The response body is serialized with `JsonConvert.SerializeObject(output)` (Newtonsoft, default casing),
-so a generic 500 looks like:
+The response body is serialized with ASP.NET Core's configured JSON options (camelCase by default), so it
+has the same shape as the envelopes MVC writes for controller results — the same applies to the 401
+envelopes `AuthenticationMiddleware` writes. A generic 500 looks like:
 
 ```json
 {
-  "Success": false,
-  "Data": "",
-  "Messages": ["Internal server error, please try again later"],
-  "Errors": []
+  "data": "",
+  "success": false,
+  "errors": ["Internal server error, please try again later"],
+  "messages": [],
+  "timestamp": "2026-01-01T12:00:00Z"
 }
 ```
 
@@ -70,6 +80,9 @@ constructor — not on every request.
 For each request, `InvokeAsync`:
 
 1. Reuses `Activity.Current` if one already exists, or starts a new `"ServerReceive"` activity otherwise.
+   When it starts one and the request carries a valid `traceparent` (and optionally `tracestate`)
+   header, the new activity is parented to it, so the caller's trace continues instead of a new,
+   unrelated trace being started.
 2. Sets `context.TraceIdentifier` and `context.Items["TraceId"]` to the activity's trace id.
 3. Writes a `traceparent` response header formatted as `00-{traceId}-{spanId}-{flags}` (the standard W3C
    trace-context format), so callers can correlate their request with the server-side trace even if they
@@ -79,7 +92,7 @@ For each request, `InvokeAsync`:
 flowchart LR
     Req["Incoming request"] --> Check{"Activity.Current?"}
     Check -- "exists" --> Reuse["Reuse it"]
-    Check -- "none" --> New["Start new ServerReceive activity"]
+    Check -- "none" --> New["Start new ServerReceive activity<br/><i>parented to incoming traceparent/tracestate, if any</i>"]
     Reuse --> Set["context.TraceIdentifier / Items[TraceId]"]
     New --> Set
     Set --> Header["Response header: traceparent"]
@@ -91,15 +104,16 @@ flowchart LR
 `TracePropagationHandler` is a `DelegatingHandler` for outgoing typed/named `HttpClient`s. When
 `Activity.Current` is set (typically because `TraceActivityMiddleware` is running the current request)
 and the outgoing request doesn't already carry a `traceparent` header, it adds one built from the same
-`00-{traceId}-{spanId}-{flags}` format — so a call your service makes to another service continues the
-same distributed trace instead of starting a new one.
+`00-{traceId}-{spanId}-{flags}` format, plus a `tracestate` header when the activity has one — so a call
+your service makes to another service continues the same distributed trace instead of starting a new one.
 
-Register it as a message handler on any typed `HttpClient` you want the trace id to flow through:
+Add it to any typed or named `HttpClient` you want the trace id to flow through with the
+`AddTracePropagation()` extension (`ArturRios.Util.WebApi.Extensions`), which also registers the handler
+with the container:
 
 ```csharp
-builder.Services.AddTransient<TracePropagationHandler>();
 builder.Services.AddHttpClient<MyApiClient>()
-    .AddHttpMessageHandler<TracePropagationHandler>();
+    .AddTracePropagation();
 ```
 
 See [HTTP Client](../http-client/) for how `BaseWebApiClient` fits into that registration.
@@ -107,9 +121,9 @@ See [HTTP Client](../http-client/) for how `BaseWebApiClient` fits into that reg
 ## Where to next
 
 - **[Architecture](../architecture/)** — how these middlewares sit relative to `AuthenticationMiddleware` and
-  `ResponseResolver` in the full pipeline.
+  `ToActionResult` in the full pipeline.
 - **[Configuration](../configuration/)** — registering middlewares via `AddMiddlewares` as part of
   `WebApiStartup`.
 - **[HTTP Client](../http-client/)** — pairing `TracePropagationHandler` with `BaseWebApiClient`.
 - **[Responses](../responses/)** — the `DataOutput<T>`/`ProcessOutput` envelopes `ExceptionMiddleware` and
-  `ResponseResolver` both use.
+  `ToActionResult` both use.

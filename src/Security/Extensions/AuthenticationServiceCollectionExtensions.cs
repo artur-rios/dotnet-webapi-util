@@ -23,16 +23,23 @@ public static class AuthenticationServiceCollectionExtensions
     /// <param name="services">The service collection to register into.</param>
     /// <param name="configure">Optional callback to configure caching behavior (time-to-live, negative caching).</param>
     /// <returns>The same <paramref name="services"/> instance, for chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The configured time-to-live is not positive.</exception>
     public static IServiceCollection AddCachedAuthenticationProvider<TProvider>(
         this IServiceCollection services,
         Action<CachedAuthenticationProviderOptions>? configure = null)
         where TProvider : class, IAuthenticationProvider
     {
-        services.AddMemoryCache();
-        services.AddScoped<TProvider>();
-
         var options = new CachedAuthenticationProviderOptions();
         configure?.Invoke(options);
+
+        if (options.Ttl <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(configure), options.Ttl,
+                "CachedAuthenticationProviderOptions.Ttl must be positive.");
+        }
+
+        services.AddMemoryCache();
+        services.AddScoped<TProvider>();
 
         services.AddScoped<IAuthenticationProvider>(serviceProvider =>
             new CachedAuthenticationProvider(
@@ -62,7 +69,7 @@ public static class AuthenticationServiceCollectionExtensions
     /// is already registered. Validators are registered app-JWT first, Google second, so the middleware
     /// tries them in that order. The app must separately register <c>JwtConfiguration</c> and
     /// <c>JwtHandler</c> (for JWT) and an <see cref="IAuthenticationProvider"/> (required for Google and
-    /// for JWT <c>Revalidate</c> mode).
+    /// for JWT <c>Revalidate</c> mode). Calling it again does not register a validator twice.
     /// </summary>
     /// <typeparam name="TMapper">The mapper translating between the app's user and its token claims.</typeparam>
     /// <param name="services">The service collection to register into.</param>
@@ -72,6 +79,8 @@ public static class AuthenticationServiceCollectionExtensions
         this IServiceCollection services, Action<AuthenticationOptions> configure)
         where TMapper : class, IAuthenticatedUserMapper
     {
+        ArgumentNullException.ThrowIfNull(configure);
+
         var options = new AuthenticationOptions();
         configure(options);
 
@@ -90,13 +99,13 @@ public static class AuthenticationServiceCollectionExtensions
 
         if (options.EnableJwt)
         {
-            services.AddSingleton<ITokenValidator, JwtTokenValidator>();
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<ITokenValidator, JwtTokenValidator>());
         }
 
         if (options.EnableGoogle)
         {
             services.TryAddSingleton<IGoogleTokenVerifier, GoogleTokenVerifier>();
-            services.AddSingleton<ITokenValidator, GoogleTokenValidator>();
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<ITokenValidator, GoogleTokenValidator>());
         }
 
         return services;

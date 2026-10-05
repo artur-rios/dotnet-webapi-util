@@ -31,7 +31,7 @@ builder.Services.AddTokenAuthentication(options =>
 
 `AddTokenAuthentication` registers the `AuthenticationOptions` instance plus one `ITokenValidator` per
 enabled scheme (app JWT first, then Google, so that's the order `AuthenticationMiddleware` tries them
-in). It throws an `ArgumentException` if:
+in). Calling it more than once doesn't register a validator twice. It throws an `ArgumentException` if:
 
 - neither `EnableJwt` nor `EnableGoogle` is `true` — at least one scheme must be enabled; or
 - `EnableGoogle` is `true` but `GoogleClientIds` is empty.
@@ -42,7 +42,9 @@ required (see below), an `IAuthenticationProvider`.
 ## `TokenSource` — where the token is read from
 
 `AuthenticationOptions.Source` controls how `AuthenticationMiddleware` extracts the raw token from the
-request, via `TokenExtractor`:
+request, via the `HttpContext.ExtractToken(source, cookieName)` extension
+(`ArturRios.Util.WebApi.Security.Extensions`, also usable from your own code). It replaces
+`TokenExtractor.Extract(context, source, cookieName)`, which was removed in 5.0.0:
 
 - **`Header` (default)** — the `Authorization` header only. The scheme **must** be `Bearer`
   (case-insensitive) with a non-empty parameter; any other or malformed scheme is treated as no token.
@@ -54,13 +56,18 @@ request, via `TokenExtractor`:
 `AuthenticationMiddleware` runs once per request (see [Architecture](../architecture/) for where it sits in
 the pipeline). For each request it:
 
-1. Skips validation entirely for Swagger routes and for endpoints marked `[AllowAnonymous]`.
+1. Skips validation entirely for Swagger routes (`/swagger` and anything under it, whenever Swagger is
+   served — see [Configuration](../configuration/)) and for endpoints marked `[AllowAnonymous]` (this
+   library's attribute or ASP.NET Core's own, on the action or its controller).
 2. Extracts the token per `AuthenticationOptions.Source`, as above.
 3. Runs the token through the enabled validators, in registration order (app JWT, then Google). The first
    validator that resolves an `IAuthenticatedUser` wins: it's attached to `HttpContext.Items["User"]` and
    the next middleware runs.
-4. If no validator resolves a user, the request gets a 401 with the last validator's error (e.g.
-   `"Invalid token"`, `"Invalid Google token"`, `"User not found"`).
+4. If no validator resolves a user, the request gets a 401 with a failed `ProcessOutput` envelope
+   carrying the last validator's error (e.g. `"Invalid token"`, `"Invalid Google token"`,
+   `"User not found"`) — or `"Authentication token not provided"` when no token was found on the request
+   at all. The validators still run in that case; only the error text differs. The envelope is serialized
+   with ASP.NET Core's JSON options (camelCase), the same shape MVC uses for controller results.
 
 ## The app JWT scheme — `ClaimsOnly` vs `Revalidate`
 
@@ -140,7 +147,9 @@ as a `CachedAuthenticationProvider` decorating `TProvider`. Both provider method
 `GetAuthenticatedUserById` checks the cache first (key `"auth:user:" + id` by default, via
 `CacheKeyPrefix`), and `GetAuthenticatedUserByEmail` does the same keyed by email (`"auth:email:" + email`
 by default, via `EmailCacheKeyPrefix`). On a miss, each delegates to the inner provider and caches the
-result for `Ttl`, but only caches a `null` result (a miss) when `CacheMisses` is `true`. This bounds
+result for `Ttl` (which must be positive — `AddCachedAuthenticationProvider` throws an
+`ArgumentOutOfRangeException` otherwise), but only caches a `null` result (a miss) when `CacheMisses` is
+`true`. This bounds
 staleness to the TTL while collapsing bursts of requests for the same user into a single store hit —
 `AuthenticationMiddleware` (for both the JWT `Revalidate` and Google schemes) and your own code both see
 it as a plain `IAuthenticationProvider` and don't need to know caching is happening.
@@ -236,17 +245,21 @@ public class AccountsController : ControllerBase
 ```
 
 - **`[Authorize]`** — an `IAuthorizationFilter` that checks `HttpContext.Items["User"]`; if it's `null`,
-  the request short-circuits with a 401 (`{"message": "Unauthorized"}`). It first checks the action for
+  the request short-circuits with a 401 carrying a failed `ProcessOutput` envelope
+  (`{"success": false, "errors": ["Unauthorized"], ...}`). It first checks the endpoint for
   `[AllowAnonymous]` and returns immediately (no 401) if present.
 - **`[RoleRequirement(params int[] authorizedRoles)]`** — a `TypeFilterAttribute` around
-  `RoleRequirementFilter`. It reads the same `HttpContext.Items["User"]`; if the user is present and its
-  `RoleId` is one of `authorizedRoles`, the request proceeds, otherwise it short-circuits with a 403
-  (a `ProcessOutput` with the error `"You do not have permission to access this resource"`). It also
-  honors `[AllowAnonymous]` — an anonymous-marked action returns immediately without a role check, even
-  under `[RoleRequirement(...)]`.
-- **`[AllowAnonymous]`** — a plain marker attribute; it doesn't enforce anything itself, but
-  `AuthenticationMiddleware`, `AuthorizeAttribute` and `RoleRequirementFilter` all check for it and skip
-  their own enforcement when it's present on the action.
+  `RoleRequirementFilter`. It reads the same `HttpContext.Items["User"]`; if no user is present it
+  short-circuits with a 401 (the same `"Unauthorized"` envelope as `[Authorize]`); if the user's `RoleId`
+  is one of `authorizedRoles`, the request proceeds, otherwise it short-circuits with a 403 (a
+  `ProcessOutput` with the error `"You do not have permission to access this resource"`). It also honors
+  `[AllowAnonymous]` — an anonymous-marked action returns immediately without a role check, even under
+  `[RoleRequirement(...)]`.
+- **`[AllowAnonymous]`** — a marker attribute for an action or a whole controller; it doesn't enforce
+  anything itself, but `AuthenticationMiddleware`, `AuthorizeAttribute` and `RoleRequirementFilter` all
+  check for it and skip their own enforcement when it's present. It implements ASP.NET Core's
+  `IAllowAnonymous`, so ASP.NET Core's own `[AllowAnonymous]` is honored the same way, and this library's
+  attribute is in turn recognized by ASP.NET Core's authorization.
 
 Because both filters read `HttpContext.Items["User"]` rather than re-validating the token themselves,
 `[Authorize]`/`[RoleRequirement]` only make sense downstream of `AuthenticationMiddleware` — see

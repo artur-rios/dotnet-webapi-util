@@ -1,7 +1,9 @@
 using System.Text.Json;
 using ArturRios.Output;
+using ArturRios.Util.WebApi.EndpointToggle;
 using ArturRios.Util.WebApi.Middleware;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Util.WebApi.Tests.Middleware;
@@ -24,7 +26,7 @@ public class ExceptionEnvelopeTests
 
         var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
 
-        return JsonSerializer.Deserialize<DataOutput<string>>(body)!;
+        return JsonSerializer.Deserialize<DataOutput<string>>(body, JsonSerializerOptions.Web)!;
     }
 
     [Fact]
@@ -71,6 +73,50 @@ public class ExceptionEnvelopeTests
 
         Assert.Equal(200, context.Response.StatusCode);
         Assert.Equal(0, context.Response.Body.Length);
+    }
+
+    [Fact]
+    public async Task GivenAnEndpointDisabledException_WhenTheRequestIsProcessed_ThenItsOwnStatusCodeIsUsed()
+    {
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+
+        await new ExceptionMiddleware(_ => throw new EndpointDisabledException(["off"], 503),
+            NullLogger<ExceptionMiddleware>.Instance).InvokeAsync(context);
+
+        Assert.Equal(503, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GivenAnUnhandledException_WhenTheEnvelopeIsWritten_ThenItsPropertiesAreCamelCasedLikeMvcs()
+    {
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+
+        await new ExceptionMiddleware(_ => throw new InvalidOperationException("boom"),
+            NullLogger<ExceptionMiddleware>.Instance).InvokeAsync(context);
+
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
+
+        Assert.Contains("\"success\":false", body);
+        Assert.Contains("\"errors\":", body);
+    }
+
+    [Fact]
+    public async Task GivenTheResponseHasStarted_WhenAnExceptionIsThrown_ThenItIsRethrownRatherThanSwallowed()
+    {
+        var context = new DefaultHttpContext();
+        context.Features.Set<IHttpResponseFeature>(new StartedResponseFeature());
+
+        var middleware = new ExceptionMiddleware(_ => throw new InvalidOperationException("boom"),
+            NullLogger<ExceptionMiddleware>.Instance);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(context));
+    }
+
+    private sealed class StartedResponseFeature : HttpResponseFeature
+    {
+        public override bool HasStarted => true;
     }
 
     private sealed class TestCustomException(string[] messages) : CustomException(messages);

@@ -53,7 +53,9 @@ It exposes:
   it again (e.g. after re-authenticating) simply replaces the previous header rather than accumulating
   anything.
 - **`AuthenticateAndAuthorizeAsync(Credentials credentials, string authRoute)`** — calls
-  `AuthenticateAsync` then `Authorize` with the returned token, in one call.
+  `AuthenticateAsync` then `Authorize` with the returned token, in one call. Throws
+  `WebApiClientException` if the returned `Authentication` isn't `Valid` or carries no token, so a failed
+  login never leaves the client with an empty bearer header.
 
 ```csharp
 public class AccountsRoute(HttpGateway gateway) : BaseWebApiClientRoute(gateway)
@@ -71,22 +73,26 @@ share the same underlying `HttpClient`.
 
 ## `WebApiClientException`
 
-A plain `Exception` subclass raised when a `BaseWebApiClientRoute` operation can't complete — currently,
-only when `AuthenticateAsync` gets a response with no body. Catch it around login calls if you want to
-distinguish "the remote API is unreachable/malformed" from a normal authentication failure surfaced
-through the `Authentication.Valid` flag.
+A plain `Exception` subclass raised when a `BaseWebApiClientRoute` operation can't complete — when
+`AuthenticateAsync` gets a response with no body, or when `AuthenticateAndAuthorizeAsync` gets an
+`Authentication` that isn't `Valid` or has no token. Catch it around login calls; when calling
+`AuthenticateAsync` directly, a normal authentication failure is still surfaced through the
+`Authentication.Valid` flag instead.
 
 ## Pairing with `TracePropagationHandler`
 
 Because the `HttpClient`-based constructor is built for `IHttpClientFactory`, you can attach
-`TracePropagationHandler` (see [Middleware & Diagnostics](../middleware-and-diagnostics/)) so every
-outgoing call from the client carries the current request's W3C trace id:
+`TracePropagationHandler` (see [Middleware & Diagnostics](../middleware-and-diagnostics/)) with the
+`AddTracePropagation()` extension (`ArturRios.Util.WebApi.Extensions`), so every outgoing call from the
+client carries the current request's W3C trace id (`traceparent`, plus `tracestate` when present):
 
 ```csharp
-builder.Services.AddTransient<TracePropagationHandler>();
 builder.Services.AddHttpClient<MyApiClient>()
-    .AddHttpMessageHandler<TracePropagationHandler>();
+    .AddTracePropagation();
 ```
+
+`AddTracePropagation()` registers the handler with the container if it isn't already, so no separate
+`AddTransient<TracePropagationHandler>()` call is needed.
 
 ```mermaid
 flowchart LR

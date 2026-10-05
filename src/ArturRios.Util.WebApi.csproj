@@ -21,6 +21,9 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="ArturRios.Configuration" Version="1.2.0" />
     <PackageReference Include="ArturRios.Jwt" Version="1.2.0" />
     <PackageReference Include="ArturRios.Util" Version="2.1.0" />

@@ -24,9 +24,9 @@ Requires **.NET 10**.
 |---|---|---|
 | Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/docs/configuration/) |
 | Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/) |
-| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate a W3C `traceparent` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/docs/middleware-and-diagnostics/) |
+| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate the W3C `traceparent`/`tracestate` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/docs/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/docs/http-client/) |
-| Responses | `ResponseResolver.Resolve(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/docs/responses/) |
+| Responses | `output.ToActionResult(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/docs/responses/) |
 | Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint toggling](https://artur-rios.github.io/dotnet-webapi-util/docs/endpoint-toggle/) |
 
 See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/docs/architecture/)** for how these pieces fit together.
@@ -70,18 +70,21 @@ new Startup(args).BuildAndRun();
 ```
 
 Startup behavior can be tweaked without code changes via command-line args parsed by `WebApiParameters`
-(`Environment:Production`, `UseAppSetting:false`, `UseEnvFile:false`,
-`SwaggerEnvironments:[Development,Staging]`). Swagger is enabled per environment: it is served in
+(`Environment:Production`, `UseAppSettings:false`, `UseEnvFile:false`, `EnableSwaggerDocs:false`,
+`SwaggerEnvironments:[Development,Staging]`; keys are case-insensitive). `Environment:<name>` becomes the
+host environment, overriding `ASPNETCORE_ENVIRONMENT`. Swagger is enabled per environment: it is served in
 `Development` and `Local` by default, and the allowed environments can be overridden with the
-`SwaggerEnvironments:[...]` arg or by passing `allowedEnvironments` to `UseSwagger` / `UseSwaggerGen`.
+`SwaggerEnvironments:[...]` arg or by passing `allowedEnvironments` to `UseSwagger` / `UseSwaggerGen`;
+`EnableSwaggerDocs:false` turns it off in every environment.
 
 ### Security
 
 `AuthenticationMiddleware` extracts a token from the request — the `Authorization: Bearer` header, a
 cookie, or either, per `AuthenticationOptions.Source` — and runs it through the enabled validators
 (the app's own JWT and/or a Google ID token) until one resolves an `IAuthenticatedUser`, which is then
-attached to `HttpContext.Items["User"]`. Swagger routes and endpoints marked with `[AllowAnonymous]` are
-skipped.
+attached to `HttpContext.Items["User"]`. Swagger routes (whenever Swagger is served) and endpoints marked
+with `[AllowAnonymous]` are skipped; any other request without a resolved user gets a 401 with a failed
+`ProcessOutput` envelope (`"Authentication token not provided"` when no token was found).
 
 Register it with `AddTokenAuthentication`:
 
@@ -149,8 +152,9 @@ store hit.
 #### Declaring access rules
 
 `[Authorize]` requires an authenticated user (401 otherwise); `[RoleRequirement(...)]` additionally
-requires the user's role to be one of the given values (403 otherwise); `[AllowAnonymous]` exempts a
-single action from both:
+requires the user's role to be one of the given values (403 otherwise); `[AllowAnonymous]` — this
+library's or ASP.NET Core's own — exempts an action or a whole controller from both. Both filters answer
+with a failed `ProcessOutput` envelope (`errors: ["Unauthorized"]` for a 401):
 
 ```csharp
 [Authorize]
@@ -169,7 +173,8 @@ public class AccountsController : ControllerBase
 ### Middleware & diagnostics
 
 Register the built-in middlewares (each derives from `WebApiMiddleware`) in pipeline order with
-`AddMiddlewares`:
+`AddMiddlewares` (or `App.UseWebApiMiddlewares(...)` outside `WebApiStartup`); a type that doesn't derive
+from `WebApiMiddleware` throws an `ArgumentException`:
 
 ```csharp
 AddMiddlewares([
@@ -180,13 +185,13 @@ AddMiddlewares([
 ```
 
 `TraceActivityMiddleware` puts the current trace id on `HttpContext.TraceIdentifier` and
-`HttpContext.Items["TraceId"]` and echoes it on the response's `traceparent` header. To keep that trace
-id flowing into calls made with `HttpClient`, register `TracePropagationHandler` as a message handler:
+`HttpContext.Items["TraceId"]` and echoes it on the response's `traceparent` header, continuing an
+incoming `traceparent`/`tracestate` when there is no ambient activity. To keep that trace id flowing into
+calls made with `HttpClient`, add `TracePropagationHandler` to the client with `AddTracePropagation()`:
 
 ```csharp
-builder.Services.AddTransient<TracePropagationHandler>();
 builder.Services.AddHttpClient<MyApiClient>()
-    .AddHttpMessageHandler<TracePropagationHandler>();
+    .AddTracePropagation();
 ```
 
 ### HTTP client
@@ -216,12 +221,13 @@ public class AccountsRoute(HttpGateway gateway) : BaseWebApiClientRoute(gateway)
 ```
 
 `AuthenticateAndAuthorizeAsync` posts the credentials, then applies the returned token as the
-`Authorization: Bearer` header for every subsequent call made through the shared `Gateway`.
+`Authorization: Bearer` header for every subsequent call made through the shared `Gateway`; it throws a
+`WebApiClientException` when the response isn't valid or carries no token.
 
 ### Responses
 
-`ResponseResolver.Resolve(...)` maps an `ArturRios.Output` envelope to an `ActionResult`, defaulting the
-HTTP status to 200 on success and 400 on failure:
+The `ToActionResult(...)` extension (`ArturRios.Util.WebApi.AspNetCore`) maps an `ArturRios.Output`
+envelope to an `ActionResult`, defaulting the HTTP status to 200 on success and 400 on failure:
 
 ```csharp
 [HttpGet("{id:int}")]
@@ -229,12 +235,13 @@ public ActionResult<DataOutput<UserDto?>> GetById(int id)
 {
     DataOutput<UserDto?> output = _userService.GetById(id);
 
-    return ResponseResolver.Resolve(output);
+    return output.ToActionResult();
 }
 ```
 
 Overloads also accept `PaginatedOutput<T>` and `ProcessOutput`, and all of them take an optional
-explicit `statusCode` to override the default.
+explicit `statusCode` and `statusMap` to override the default. They replace `ResponseResolver.Resolve(...)`,
+which was removed in 5.0.0.
 
 ### Endpoint toggling
 
@@ -259,8 +266,8 @@ public class ReportsController : ControllerBase
 
 When the endpoint is disabled, `disabledOutputType` decides the shape of the response — an empty status
 code (`Void`), the action's default return value (`Default`), a `ProcessOutput` envelope carrying
-`disabledMessage` (`Object`, the default), or a thrown `EndpointDisabledException` (`Exception`) that the
-exception pipeline handles. The status code defaults to `404 Not Found` and can be overridden with
+`disabledMessage` as an error (`Object`, the default), or a thrown `EndpointDisabledException`
+(`Exception`) that `ExceptionMiddleware` answers with the same status code. The status code defaults to `404 Not Found` and can be overridden with
 `disabledStatusCode`.
 
 ## Documentation

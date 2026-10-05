@@ -1,3 +1,4 @@
+using ArturRios.Output;
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -53,8 +54,20 @@ public class AuthorizeAttributeTests
 
         new AuthorizeAttribute().OnAuthorization(context);
 
-        var result = Assert.IsType<JsonResult>(context.Result);
+        var result = Assert.IsType<ObjectResult>(context.Result);
         Assert.Equal(StatusCodes.Status401Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public void GivenNoUserIsAttached_WhenAuthorizing_ThenTheBodyIsAFailedEnvelopeLikeTheMiddlewares()
+    {
+        var context = BuildContext(null, allowAnonymous: false);
+
+        new AuthorizeAttribute().OnAuthorization(context);
+
+        var output = Assert.IsType<ProcessOutput>(Assert.IsType<ObjectResult>(context.Result).Value);
+        Assert.False(output.Success);
+        Assert.Contains("Unauthorized", output.Errors);
     }
 
     [Fact]
