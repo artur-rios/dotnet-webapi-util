@@ -43,7 +43,7 @@ flowchart TB
 | 4 | `Builder.AddWebApiSwagger(Parameters, Options.Swagger)` | Registers the Swagger generator, only in environments where Swagger is allowed, and sets the `Swagger:Enabled` marker. | `Options.Swagger`, `EnableSwaggerDocs:` / `SwaggerEnvironments:` args |
 | 5 | `ConfigureServices(builder)` | **Your** services: data access, handlers, `AddTokenAuthentication`, `AddCors`, hosted services, logging, and so on. | your override |
 | 6 | `Builder.Build()` | Builds the `WebApplication`. | — |
-| 7 | `app.UseStandardMiddlewares(Options.CorsPolicy)` | `TraceActivityMiddleware`, `ExceptionMiddleware`, Swagger (only if step 4 registered the generator), `UseCors` (only if a policy is named), then `AuthenticationMiddleware` (only if `AddTokenAuthentication` was called). Swagger and CORS run before authentication, so the Swagger UI and CORS preflight requests never need a token. | `Options.CorsPolicy`, whether `AddTokenAuthentication` was registered |
+| 7 | `app.UseStandardMiddlewares(Options.CorsPolicy)` | `UseForwardedHeaders` (a no-op until `ForwardedHeadersOptions` is configured), `TraceActivityMiddleware`, `ExceptionMiddleware`, Swagger (only if step 4 registered the generator), `UseCors` (only if a policy is named), then `AuthenticationMiddleware` (only if `AddTokenAuthentication` was called). Swagger and CORS run before authentication, so the Swagger UI and CORS preflight requests never need a token. | `Options.CorsPolicy`, whether `AddTokenAuthentication` was registered |
 | 8 | `app.UseWebApiMiddlewares(Options.Middlewares)` | Your extra `WebApiMiddleware` types, in order, after the standard ones. | `Options.Middlewares` |
 | 9 | `app.MapControllers()` | Maps the controller endpoints. | — |
 
@@ -140,7 +140,7 @@ app.Run();
 | `LoadConfiguration(WebApiParameters)` | `WebApplicationBuilder` | Loads `appsettings`/the env file per the parameters and registers `WebApiParameters`, `ConfigurationLoader`, `SettingsProvider` and (when the env file is loaded) `EnvironmentProvider`. |
 | `AddWebApiSwagger(WebApiParameters, Action<WebApiSwaggerOptions>?)` | `WebApplicationBuilder` | Registers the Swagger generator only when Swagger is allowed in the current environment, and sets the `Swagger:Enabled` marker for the `AuthenticationMiddleware` bypass. |
 | `AddInvalidModelStateEnvelope()` | `IServiceCollection` | Replaces the default invalid-model-state response with a `DataOutput<string>`-shaped 400. |
-| `UseStandardMiddlewares(corsPolicy?)` | `IApplicationBuilder` | `TraceActivityMiddleware`, `ExceptionMiddleware`, Swagger (if the generator was registered), `UseCors` (if a policy is named), then `AuthenticationMiddleware` if `AddTokenAuthentication` was registered. |
+| `UseStandardMiddlewares(corsPolicy?)` | `IApplicationBuilder` | `UseForwardedHeaders` (no-op until configured), `TraceActivityMiddleware`, `ExceptionMiddleware`, Swagger (if the generator was registered), `UseCors` (if a policy is named), then `AuthenticationMiddleware` if `AddTokenAuthentication` was registered. |
 | `UseWebApiSwagger()` | `IApplicationBuilder` | Serves the Swagger JSON and UI only if the generator was registered, so the generator and the UI can never disagree. Already part of `UseStandardMiddlewares`; call it alone only when composing the pipeline piece by piece. |
 | `UseWebApiMiddlewares(params IEnumerable<Type>)` | `IApplicationBuilder` | Registers each `WebApiMiddleware` type, in order; throws an `ArgumentException` for any other type, before registering anything. |
 

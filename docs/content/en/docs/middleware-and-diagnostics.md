@@ -19,6 +19,7 @@ fixed order:
 
 ```csharp
 app.UseStandardMiddlewares();
+// 0. UseForwardedHeaders      — no-op until ForwardedHeadersOptions is configured
 // 1. TraceActivityMiddleware  — assigns/propagates a W3C trace id
 // 2. ExceptionMiddleware      — turns unhandled exceptions into a JSON error envelope
 // 3. Swagger JSON + UI        — only when the Swagger generator was registered
@@ -112,6 +113,33 @@ For each request, `InvokeAsync`:
 3. Writes a `traceparent` response header formatted as `00-{traceId}-{spanId}-{flags}` (the standard W3C
    trace-context format), so callers can correlate their request with the server-side trace even if they
    didn't originate it.
+4. Logs `Started request with TraceId {TraceId} from {ClientIp}` at `Information`, and tags the activity
+   with `client.address` (the OpenTelemetry convention), so tracing backends show who made the request.
+
+### The client IP address
+
+The address comes from `HttpContext.GetClientIpAddress()` (`ArturRios.Util.WebApi.Extensions`), which you
+can call from your own code too. It reads `Connection.RemoteIpAddress`, returns an IPv4 address carried as
+IPv6 (`::ffff:203.0.113.7`) in its IPv4 form, and returns `null` when the server doesn't know the address
+(logged as `unknown`).
+
+Behind a reverse proxy or load balancer, `RemoteIpAddress` is the proxy's address. `UseStandardMiddlewares()`
+(and so `WebApiStartup`) runs ASP.NET Core's `UseForwardedHeaders()` as its very first step, ahead of
+`TraceActivityMiddleware`. It does nothing until you configure `ForwardedHeadersOptions` with the headers to
+honor and the proxies you trust; then the real client address is taken from `X-Forwarded-For`. Neither the
+middleware nor `GetClientIpAddress` reads that header directly, since any client can forge it:
+
+```csharp
+// In ConfigureServices (or on a plain builder):
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownProxies.Add(IPAddress.Parse("10.0.0.10"));
+});
+```
+
+An IP address is personal data in many jurisdictions (for example under the GDPR); keep it in mind when
+deciding where these logs are shipped and how long they are kept.
 
 ```mermaid
 flowchart LR
@@ -121,7 +149,8 @@ flowchart LR
     Reuse --> Set["context.TraceIdentifier / Items[TraceId]"]
     New --> Set
     Set --> Header["Response header: traceparent"]
-    Header --> Next["Next middleware / endpoint"]
+    Header --> Log["Log trace id + client IP<br/><i>tag client.address</i>"]
+    Log --> Next["Next middleware / endpoint"]
 ```
 
 ## `TracePropagationHandler`

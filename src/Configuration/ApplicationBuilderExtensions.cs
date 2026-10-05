@@ -14,7 +14,9 @@ public static class ApplicationBuilderExtensions
     /// <param name="app">The application builder.</param>
     extension(IApplicationBuilder app)
     {
-        /// <summary>Adds the standard middlewares, in order: <see cref="TraceActivityMiddleware"/>,
+        /// <summary>Adds the standard middlewares, in order: ASP.NET Core's forwarded headers (a no-op until
+        /// <c>ForwardedHeadersOptions</c> is configured, so the client IP behind a trusted proxy is the real one),
+        /// <see cref="TraceActivityMiddleware"/>,
         /// <see cref="ExceptionMiddleware"/>, Swagger (see <see cref="UseWebApiSwagger"/>), CORS when
         /// <paramref name="corsPolicy"/> is given, then <see cref="AuthenticationMiddleware"/> when token authentication
         /// was registered with <c>AddTokenAuthentication</c>. Swagger and CORS come before authentication, so the
@@ -24,6 +26,7 @@ public static class ApplicationBuilderExtensions
         /// <returns>The same <paramref name="app"/> instance, for chaining.</returns>
         public IApplicationBuilder UseStandardMiddlewares(string? corsPolicy = null)
         {
+            app.UseForwardedHeaders();
             app.UseMiddleware<TraceActivityMiddleware>();
             app.UseMiddleware<ExceptionMiddleware>();
             app.UseWebApiSwagger();

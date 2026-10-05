@@ -6,12 +6,14 @@ using ArturRios.Configuration.Providers;
 using ArturRios.Jwt;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.Configuration;
+using ArturRios.Util.WebApi.Extensions;
 using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
@@ -239,6 +241,36 @@ public sealed class WebApiStartupTests : IAsyncLifetime
         var response = await client.GetAsync("/swagger/v1/swagger.json");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GivenForwardedHeadersAreConfigured_WhenAProxyForwardsTheClient_ThenTheClientIpIsTheForwardedOne()
+    {
+        var client = await Start(
+            configureServices: builder => builder.Services.Configure<ForwardedHeadersOptions>(options =>
+            {
+                options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+                options.KnownIPNetworks.Clear();
+                options.KnownProxies.Clear();
+            }),
+            configureApp: app => app.MapGet("/ip", (HttpContext context) => context.GetClientIpAddress() ?? "none"));
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/ip");
+        request.Headers.Add("X-Forwarded-For", "198.51.100.9");
+
+        Assert.Equal("198.51.100.9", await (await client.SendAsync(request)).Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task GivenForwardedHeadersAreNotConfigured_WhenAClientSendsXForwardedFor_ThenItIsIgnored()
+    {
+        var client = await Start(
+            configureApp: app => app.MapGet("/ip", (HttpContext context) => context.GetClientIpAddress() ?? "none"));
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/ip");
+        request.Headers.Add("X-Forwarded-For", "198.51.100.9");
+
+        Assert.Equal("none", await (await client.SendAsync(request)).Content.ReadAsStringAsync());
     }
 
     [Fact]

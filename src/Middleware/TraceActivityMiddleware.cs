@@ -9,13 +9,18 @@ namespace ArturRios.Util.WebApi.Middleware;
 /// Ensures every request is associated with a W3C-format <see cref="Activity"/>, propagating or creating one as
 /// needed, and exposes its trace id on <see cref="HttpContext.TraceIdentifier"/>, <c>HttpContext.Items["TraceId"]</c>
 /// and the response's <c>traceparent</c> header. When it has to create the activity itself, an incoming
-/// <c>traceparent</c>/<c>tracestate</c> pair becomes its parent, so the caller's trace continues.
+/// <c>traceparent</c>/<c>tracestate</c> pair becomes its parent, so the caller's trace continues. Logs the start of
+/// each request at <see cref="LogLevel.Information"/> with its trace id and the client's IP address (see
+/// <see cref="HttpContextClientExtensions.GetClientIpAddress"/>), which is also tagged on the activity as
+/// <c>client.address</c>.
 /// </summary>
 /// <param name="next">The next middleware in the pipeline.</param>
 /// <param name="logger">Used to log the start and end of each request's trace.</param>
 public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivityMiddleware> logger) : WebApiMiddleware
 {
     private const string ActivityName = "ServerReceive";
+    private const string ClientAddressTag = "client.address";
+    private const string UnknownClientIp = "unknown";
     private const string TraceIdItemKey = "TraceId";
     private const string TraceParentHeader = "traceparent";
     private const string TraceStateHeader = "tracestate";
@@ -43,7 +48,15 @@ public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivity
         context.Items[TraceIdItemKey] = traceId;
         context.Response.Headers[TraceParentHeader] = activity.ToTraceParent();
 
-        logger.LogTrace("Started request with TraceId {TraceId}", traceId);
+        var clientIp = context.GetClientIpAddress();
+
+        if (clientIp is not null)
+        {
+            activity.SetTag(ClientAddressTag, clientIp);
+        }
+
+        logger.LogInformation("Started request with TraceId {TraceId} from {ClientIp}", traceId,
+            clientIp ?? UnknownClientIp);
 
         try
         {
