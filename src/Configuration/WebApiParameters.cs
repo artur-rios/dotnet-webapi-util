@@ -1,10 +1,12 @@
 ﻿using ArturRios.Configuration.Enums;
 using ArturRios.Extensions;
+using Microsoft.AspNetCore.Builder;
 
 namespace ArturRios.Util.WebApi.Configuration;
 
 /// <summary>Startup parameters parsed from command-line arguments (e.g. <c>Environment:Production</c>,
-/// <c>EnableSwaggerDocs:false</c>), controlling how <see cref="WebApiStartup"/> configures the application.</summary>
+/// <c>EnableSwaggerDocs:false</c>), controlling how the application is configured by <see cref="WebApiStartup"/> or
+/// by the <see cref="WebApplicationBuilderExtensions"/> it is built from.</summary>
 public class WebApiParameters
 {
     private static readonly string[] DefaultSwaggerEnvironments =
@@ -15,6 +17,8 @@ public class WebApiParameters
     /// <param name="args">The command-line arguments, each in <c>Key:Value</c> form.</param>
     public WebApiParameters(string[] args)
     {
+        Args = args;
+
         if (args.IsEmpty())
         {
             return;
@@ -59,8 +63,11 @@ public class WebApiParameters
         }
     }
 
+    /// <summary>The command-line arguments these parameters were parsed from.</summary>
+    public string[] Args { get; }
+
     /// <summary>The environment name (e.g. <c>Development</c>, <c>Production</c>), if a valid one was supplied.
-    /// When set, <see cref="WebApiStartup"/> uses it as the host environment, overriding
+    /// When set, <see cref="ToWebApplicationOptions"/> makes it the host environment, overriding
     /// <c>ASPNETCORE_ENVIRONMENT</c>.</summary>
     public string EnvironmentName { get; set; } = string.Empty;
 
@@ -71,9 +78,9 @@ public class WebApiParameters
     /// <summary>Whether a <c>.env</c> file should be loaded. Defaults to <c>true</c>.</summary>
     public bool UseEnvFile { get; set; } = true;
 
-    /// <summary>Parsed from the <c>EnableSwaggerDocs</c> argument. When <c>false</c>, <see cref="WebApiStartup"/>
-    /// neither generates nor serves Swagger in any environment, whatever <see cref="SwaggerEnvironments"/> says.
-    /// Defaults to <c>true</c>, leaving Swagger gated by environment.</summary>
+    /// <summary>Parsed from the <c>EnableSwaggerDocs</c> argument. When <c>false</c>, Swagger is neither generated
+    /// nor served in any environment, whatever <see cref="SwaggerEnvironments"/> says (see
+    /// <see cref="IsSwaggerAllowed"/>). Defaults to <c>true</c>, leaving Swagger gated by environment.</summary>
     public bool EnableSwaggerDocs { get; set; } = true;
 
     /// <summary>The environment names in which Swagger should be enabled, as parsed from the <c>SwaggerEnvironments</c> argument.</summary>
@@ -92,4 +99,32 @@ public class WebApiParameters
 
         return validEnvs.IsNotEmpty() ? validEnvs : [.. DefaultSwaggerEnvironments];
     }
+
+    /// <summary>Whether Swagger is allowed in <paramref name="environmentName"/>. Never when the
+    /// <c>EnableSwaggerDocs:false</c> argument was supplied; otherwise when the environment is in
+    /// <paramref name="allowedEnvironments"/>, if non-empty, or else in <see cref="GetSwaggerEnvironments"/>.</summary>
+    /// <param name="environmentName">The current host environment name.</param>
+    /// <param name="allowedEnvironments">Optional explicit list of environments in which Swagger is allowed.</param>
+    public bool IsSwaggerAllowed(string environmentName, EnvironmentType[]? allowedEnvironments = null)
+    {
+        if (!EnableSwaggerDocs)
+        {
+            return false;
+        }
+
+        var environments = allowedEnvironments.IsNotEmpty()
+            ? allowedEnvironments!.Select(env => env.ToString())
+            : GetSwaggerEnvironments();
+
+        return environments.Contains(environmentName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Builds the <see cref="WebApplicationOptions"/> for <c>WebApplication.CreateBuilder</c>: the
+    /// original <see cref="Args"/>, and <see cref="EnvironmentName"/> as the environment when one was supplied.</summary>
+    public WebApplicationOptions ToWebApplicationOptions() =>
+        new()
+        {
+            Args = Args,
+            EnvironmentName = string.IsNullOrWhiteSpace(EnvironmentName) ? null : EnvironmentName
+        };
 }

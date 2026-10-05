@@ -8,28 +8,53 @@ description: >-
 `ArturRios.Util.WebApi` ships two request-pipeline middlewares — `TraceActivityMiddleware` and
 `ExceptionMiddleware` — plus `TracePropagationHandler`, a `DelegatingHandler` that carries the same
 trace id onto outgoing `HttpClient` calls. (The third pipeline middleware, `AuthenticationMiddleware`, is
-covered on the [Security](../security/) page.) The middlewares are registered through `AddMiddlewares`, as
-referenced in [Architecture](../architecture/) and [Configuration](../configuration/).
+covered on the [Security](../security/) page.) `WebApiStartup` adds all of them for you through
+`UseStandardMiddlewares()`, as referenced in [Architecture](../architecture/) and
+[Configuration](../configuration/).
 
 ## `WebApiMiddleware` and registration order
 
-`WebApiMiddleware` is an abstract marker base class with no members. Its only job is letting
-`WebApiStartup.AddMiddlewares(params Type[])` (and the `App.UseWebApiMiddlewares(...)` extension it
-delegates to) recognize which types it's safe to register with `App.UseMiddleware(...)` — any type in the
-array that isn't a subclass of `WebApiMiddleware` throws an `ArgumentException`, and nothing is registered.
-Registration happens **in the order given**:
+`UseStandardMiddlewares()` (`ArturRios.Util.WebApi.Configuration`) adds the built-in middlewares in a
+fixed order:
 
 ```csharp
-AddMiddlewares([
-    typeof(TraceActivityMiddleware), // assigns/propagates a W3C trace id
-    typeof(ExceptionMiddleware),     // turns unhandled exceptions into a JSON error envelope
-    typeof(AuthenticationMiddleware)
-]);
+app.UseStandardMiddlewares();
+// 1. TraceActivityMiddleware  — assigns/propagates a W3C trace id
+// 2. ExceptionMiddleware      — turns unhandled exceptions into a JSON error envelope
+// 3. Swagger JSON + UI        — only when the Swagger generator was registered
+// 4. UseCors(policy)          — only when a CORS policy name is passed
+// 5. AuthenticationMiddleware — only when AddTokenAuthentication was registered
 ```
 
 `TraceActivityMiddleware` runs first so the trace id is available to everything downstream, including
 exception logging; `ExceptionMiddleware` runs next so it can catch exceptions thrown by authentication or
-the endpoint itself; `AuthenticationMiddleware` (see [Security](../security/)) runs last of the three.
+the endpoint itself; Swagger and CORS come before `AuthenticationMiddleware` (see [Security](../security/)),
+which runs last, so the Swagger UI and CORS preflight requests never need a token.
+`WebApiStartup` calls it as the first step of the pipeline; on a plain `WebApplication`, call it yourself.
+
+`WebApiMiddleware` is an abstract marker base class with no members. Its only job is letting
+`UseWebApiMiddlewares(params IEnumerable<Type>)` recognize which types it's safe to register with
+`app.UseMiddleware(...)` — any type that isn't a subclass of `WebApiMiddleware` throws an
+`ArgumentException`, and nothing is registered. Registration happens **in the order given**. Derive your
+own middlewares from it and list them in `WebApiStartupOptions.Middlewares`, which `WebApiStartup` passes to
+`UseWebApiMiddlewares` right after the standard middlewares and before the endpoints:
+
+```csharp
+public class Startup(string[] args) : WebApiStartup(args, options =>
+{
+    options.Middlewares.Add(typeof(RequestTimingMiddleware));
+    options.Middlewares.Add(typeof(TenantMiddleware));
+})
+{
+    // ...
+}
+
+// or, on a plain WebApplication:
+app.UseStandardMiddlewares();
+app.UseWebApiMiddlewares(typeof(RequestTimingMiddleware), typeof(TenantMiddleware));
+```
+
+Don't list the built-in middlewares there as well — they would run twice.
 
 ## `ExceptionMiddleware`
 
@@ -108,7 +133,7 @@ and the outgoing request doesn't already carry a `traceparent` header, it adds o
 your service makes to another service continues the same distributed trace instead of starting a new one.
 
 Add it to any typed or named `HttpClient` you want the trace id to flow through with the
-`AddTracePropagation()` extension (`ArturRios.Util.WebApi.Extensions`), which also registers the handler
+`AddTracePropagation()` extension (`HttpClientBuilderExtensions`, in `ArturRios.Util.WebApi.Extensions`), which also registers the handler
 with the container:
 
 ```csharp
@@ -122,8 +147,8 @@ See [HTTP Client](../http-client/) for how `BaseWebApiClient` fits into that reg
 
 - **[Architecture](../architecture/)** — how these middlewares sit relative to `AuthenticationMiddleware` and
   `ToActionResult` in the full pipeline.
-- **[Configuration](../configuration/)** — registering middlewares via `AddMiddlewares` as part of
-  `WebApiStartup`.
+- **[Configuration](../configuration/)** — the standard `WebApiStartup` sequence, and registering extra
+  middlewares through `WebApiStartupOptions.Middlewares`.
 - **[HTTP Client](../http-client/)** — pairing `TracePropagationHandler` with `BaseWebApiClient`.
 - **[Responses](../responses/)** — the `DataOutput<T>`/`ProcessOutput` envelopes `ExceptionMiddleware` and
   `ToActionResult` both use.

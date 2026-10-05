@@ -83,7 +83,7 @@ A plain `Exception` subclass raised when a `BaseWebApiClientRoute` operation can
 
 Because the `HttpClient`-based constructor is built for `IHttpClientFactory`, you can attach
 `TracePropagationHandler` (see [Middleware & Diagnostics](../middleware-and-diagnostics/)) with the
-`AddTracePropagation()` extension (`ArturRios.Util.WebApi.Extensions`), so every outgoing call from the
+`AddTracePropagation()` extension (`HttpClientBuilderExtensions`, in `ArturRios.Util.WebApi.Extensions`), so every outgoing call from the
 client carries the current request's W3C trace id (`traceparent`, plus `tracestate` when present):
 
 ```csharp

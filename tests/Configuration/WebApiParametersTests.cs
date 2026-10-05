@@ -1,3 +1,4 @@
+using ArturRios.Configuration.Enums;
 using ArturRios.Util.WebApi.Configuration;
 
 namespace ArturRios.Util.WebApi.Tests.Configuration;
@@ -62,5 +63,51 @@ public class WebApiParametersTests
         parameters.GetSwaggerEnvironments()[0] = "Production";
 
         Assert.Equal(["Development", "Local"], parameters.GetSwaggerEnvironments());
+    }
+
+    [Fact]
+    public void GivenTheDevelopmentEnvironment_WhenCheckingSwagger_ThenItIsAllowedByDefault()
+    {
+        Assert.True(new WebApiParameters([]).IsSwaggerAllowed("Development"));
+    }
+
+    [Fact]
+    public void GivenTheProductionEnvironment_WhenCheckingSwagger_ThenItIsNotAllowedByDefault()
+    {
+        Assert.False(new WebApiParameters([]).IsSwaggerAllowed("Production"));
+    }
+
+    [Fact]
+    public void GivenExplicitAllowedEnvironments_WhenCheckingSwagger_ThenTheyWinOverTheArguments()
+    {
+        var parameters = new WebApiParameters(["SwaggerEnvironments:[Development]"]);
+
+        Assert.True(parameters.IsSwaggerAllowed("Production", [EnvironmentType.Production]));
+    }
+
+    [Fact]
+    public void GivenSwaggerDocsDisabled_WhenCheckingSwagger_ThenItIsNeverAllowed()
+    {
+        var parameters = new WebApiParameters(["EnableSwaggerDocs:false"]);
+
+        Assert.False(parameters.IsSwaggerAllowed("Development"));
+        Assert.False(parameters.IsSwaggerAllowed("Development", [EnvironmentType.Development]));
+    }
+
+    [Fact]
+    public void GivenAnEnvironmentArgument_WhenBuildingWebApplicationOptions_ThenItIsTheEnvironmentAndTheArgsAreKept()
+    {
+        string[] args = ["Environment:Staging", "UseEnvFile:false"];
+
+        var options = new WebApiParameters(args).ToWebApplicationOptions();
+
+        Assert.Equal("Staging", options.EnvironmentName);
+        Assert.Equal(args, options.Args);
+    }
+
+    [Fact]
+    public void GivenNoEnvironmentArgument_WhenBuildingWebApplicationOptions_ThenTheHostDecidesTheEnvironment()
+    {
+        Assert.Null(new WebApiParameters([]).ToWebApplicationOptions().EnvironmentName);
     }
 }

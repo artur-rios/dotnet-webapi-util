@@ -39,6 +39,12 @@ in). Calling it more than once doesn't register a validator twice. It throws an 
 The app must still separately register `JwtConfiguration`/`JwtHandler` (for the JWT scheme) and, when
 required (see below), an `IAuthenticationProvider`.
 
+Calling `AddTokenAuthentication` is also what puts `AuthenticationMiddleware` on the pipeline:
+`UseStandardMiddlewares()` — which `WebApiStartup` runs for you — adds it after `TraceActivityMiddleware`,
+`ExceptionMiddleware`, Swagger and CORS whenever `AuthenticationOptions` is registered, and leaves it out otherwise. With
+`WebApiStartup`, call `AddTokenAuthentication` from your `ConfigureServices` override (see
+[Configuration](../configuration/)).
+
 ## `TokenSource` — where the token is read from
 
 `AuthenticationOptions.Source` controls how `AuthenticationMiddleware` extracts the raw token from the
@@ -303,8 +309,8 @@ revocations bounded.
 
 - **[Architecture](../architecture/)** — the full token → `AuthenticationMiddleware` →
   `Items["User"]` → authorization-filter flow, alongside the rest of the pipeline.
-- **[Configuration](../configuration/)** — registering `AuthenticationMiddleware` via `AddMiddlewares`
-  and wiring up `ConfigureSecurity()`.
+- **[Configuration](../configuration/)** — how `WebApiStartup` adds `AuthenticationMiddleware` once
+  `AddTokenAuthentication` is called in `ConfigureServices`.
 - **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — how `ExceptionMiddleware` and
   `TraceActivityMiddleware` relate to the rest of the pipeline `AuthenticationMiddleware` runs in.
 

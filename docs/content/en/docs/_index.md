@@ -32,7 +32,7 @@ flowchart LR
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](configuration/) |
+| Configuration / bootstrap | `WebApiStartup` runs one standard sequence — configuration loading, Swagger, the middleware pipeline — leaving you a single `ConfigureServices` method, and every step is also a standalone extension; `WebApiParameters` parses command-line startup args. | [Configuration](configuration/) |
 | Security (JWT, Google + roles) | `AuthenticationMiddleware` reads the token from the header, a cookie, or either, and validates it as an app HMAC JWT or a Google ID token (either accepted per request), attaching an `IAuthenticatedUser`; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](security/) |
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate the W3C `traceparent`/`tracestate` across a request and its outgoing calls. | [Middleware & Diagnostics](middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP Client](http-client/) |

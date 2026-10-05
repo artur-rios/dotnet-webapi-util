@@ -94,7 +94,7 @@ follows (see [Architecture](../architecture/)): application code builds a `Proce
 `DataOutput<T>` (`WithData`, `WithError`, etc.) to describe what happened, and `ToActionResult` is the
 single place that decides how that maps onto the HTTP response — so success and failure both flow through
 the same, predictable shape instead of being scattered across `Ok(...)`/`BadRequest(...)`/`NotFound(...)`
-calls in every action. It pairs naturally with `AddCustomInvalidModelStateResponse()` (see
+calls in every action. It pairs naturally with `AddInvalidModelStateEnvelope()` (see
 [Configuration](../configuration/)), which shapes ASP.NET Core's own model-validation 400 as a
 `DataOutput<string>` so it looks identical to a failure returned through `ToActionResult`.
 
@@ -118,7 +118,7 @@ service's error messages, with no branching in the action itself.
 
 - **[Architecture](../architecture/)** — where `ToActionResult` sits at the end of the request pipeline,
   and the envelope class hierarchy (`ProcessOutput` → `DataOutput<T>` → `PaginatedOutput<T>`).
-- **[Configuration](../configuration/)** — `AddCustomInvalidModelStateResponse()`, which shapes validation
+- **[Configuration](../configuration/)** — `AddInvalidModelStateEnvelope()`, which shapes validation
   failures the same way.
 - **[Middleware & Diagnostics](../middleware-and-diagnostics/)** — `ExceptionMiddleware`, which returns the
   same `DataOutput<string>` shape for unhandled exceptions that never reach a `ToActionResult` call.

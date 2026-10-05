@@ -6,7 +6,7 @@ namespace ArturRios.Util.WebApi.Handlers;
 /// <summary>
 ///     Propagates the W3C <c>traceparent</c> (and <c>tracestate</c>, when present) headers on outgoing HttpClient
 ///     requests. Register it on typed/named HttpClients with
-///     <see cref="WebApiBuilderExtensions.AddTracePropagation"/>.
+///     <see cref="HttpClientBuilderExtensions.AddTracePropagation"/>.
 /// </summary>
 public class TracePropagationHandler : DelegatingHandler
 {

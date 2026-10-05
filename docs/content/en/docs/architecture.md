@@ -11,10 +11,11 @@ security model, the response envelope, and the design principles that hold them 
 ## Request pipeline
 
 The library is a thin layer around the standard ASP.NET Core pipeline. `WebApiStartup` builds the
-`WebApplicationBuilder`/`WebApplication` and exposes `AddMiddlewares(params Type[])`, which registers each
-given middleware type on the app **in the order supplied** (through `App.UseWebApiMiddlewares(...)`), and
-throws an `ArgumentException` for any type that isn't a `WebApiMiddleware`.
-A typical setup registers the three built-in middlewares in this order:
+`WebApplicationBuilder`/`WebApplication` through one standard sequence, whose pipeline half adds the three
+built-in middlewares with `UseStandardMiddlewares()` — `AuthenticationMiddleware` only when
+`AddTokenAuthentication` was registered, with Swagger and CORS (when enabled) served just before it — then
+any extra middlewares from `WebApiStartupOptions.Middlewares`,
+then the controllers:
 
 ```mermaid
 flowchart LR
@@ -27,15 +28,22 @@ flowchart LR
 ```
 
 `WebApiMiddleware` is an abstract marker base class with no members — its only job is to let
-`AddMiddlewares` (and `UseWebApiMiddlewares`) recognize which types are safe to register with
-`App.UseMiddleware(...)`:
+`UseWebApiMiddlewares` (which `WebApiStartup` runs over `Options.Middlewares`) recognize which types are
+safe to register with `app.UseMiddleware(...)`. It registers each type **in the order supplied**, and
+throws an `ArgumentException` for any type that isn't a `WebApiMiddleware`:
 
 ```csharp
-AddMiddlewares([
-    typeof(TraceActivityMiddleware),
-    typeof(ExceptionMiddleware),
-    typeof(AuthenticationMiddleware)
-]);
+public class Startup(string[] args) : WebApiStartup(args, options =>
+{
+    options.Middlewares.Add(typeof(MyMiddleware)); // runs after the three built-in ones
+})
+{
+    // ...
+}
+
+// or, on a plain WebApplication:
+app.UseStandardMiddlewares();
+app.UseWebApiMiddlewares(typeof(MyMiddleware));
 ```
 
 Because registration order is registration order, `TraceActivityMiddleware` runs first so the trace id
@@ -152,10 +160,14 @@ See [Responses](../responses/) for the full mapping reference.
   is there for the cases where staleness — instead of an expired token — is the risk you can't accept.
 - **Small, focused middlewares.** Each of `TraceActivityMiddleware`, `ExceptionMiddleware` and
   `AuthenticationMiddleware` does exactly one thing and derives from the `WebApiMiddleware` marker so it
-  can be composed via `AddMiddlewares` in whatever order a given host needs.
+  can be composed via `UseWebApiMiddlewares` in whatever order a given host needs.
 - **Consistent `InvokeAsync`.** Every middleware follows the standard ASP.NET Core convention — a
   constructor capturing `RequestDelegate next` plus other dependencies, and a single `InvokeAsync(HttpContext)`
-  method — so custom middlewares slot into `AddMiddlewares` the same way the built-in ones do.
+  method — so custom middlewares slot into `WebApiStartupOptions.Middlewares` (or `UseWebApiMiddlewares`)
+  the same way the built-in ones do.
+- **Opinionated, but not locked in.** `WebApiStartup` runs one standard sequence and asks only for
+  `ConfigureServices`; every step of that sequence is also a public extension method, so a host that needs
+  a different order composes the same pieces on a plain `WebApplicationBuilder`.
 - **DI-first.** Dependencies such as `IAuthenticationProvider`, `AuthenticationOptions`, the
   `ITokenValidator`s and `SettingsProvider` are resolved through the container (constructor injection or,
   for per-request freshness, `HttpContext.RequestServices`) rather than passed around manually.

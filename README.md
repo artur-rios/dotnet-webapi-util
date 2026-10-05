@@ -22,7 +22,7 @@ Requires **.NET 10**.
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` wires up configuration loading, Swagger and the middleware pipeline behind a small set of virtual hooks; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/docs/configuration/) |
+| Configuration / bootstrap | `WebApiStartup` runs one standard sequence — configuration loading, Swagger, the middleware pipeline — leaving you a single `ConfigureServices` method, and every step is also a standalone extension; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/docs/configuration/) |
 | Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/) |
 | Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate the W3C `traceparent`/`tracestate` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/docs/middleware-and-diagnostics/) |
 | HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/docs/http-client/) |
@@ -35,38 +35,55 @@ See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/docs/a
 
 ### Configuration / bootstrap
 
-Derive from `WebApiStartup` and implement `Build()`/`ConfigureApp()` using its hooks:
+Derive from `WebApiStartup`, tune the standard sequence through its options, and register your own
+services in `ConfigureServices` — the one method you implement:
 
 ```csharp
-public class Startup(string[] args) : WebApiStartup(args)
+public class Startup(string[] args) : WebApiStartup(args, options =>
 {
-    public override void Build()
+    options.Swagger.JwtAuthentication = true;
+    options.Middlewares.Add(typeof(MyMiddleware));
+})
+{
+    protected override void ConfigureServices(WebApplicationBuilder builder)
     {
-        LoadConfiguration();
-        AddCustomInvalidModelStateResponse();
-        UseSwaggerGen(jwtAuthentication: true);
-        Builder.Services.AddControllers();
-
-        AddDependencies();
-
-        BuildApp();
-        ConfigureApp();
-    }
-
-    public override void ConfigureApp()
-    {
-        AddMiddlewares([
-            typeof(TraceActivityMiddleware),
-            typeof(ExceptionMiddleware),
-            typeof(AuthenticationMiddleware)
-        ]);
-
-        UseSwagger();
-        App.MapControllers();
+        builder.Services.AddTokenAuthentication(_ => { });
+        builder.Services.AddHealthChecks();
+        builder.Services.AddScoped<IMyService, MyService>();
     }
 }
 
-new Startup(args).BuildAndRun();
+var app = new Startup(args).Build();
+app.MapHealthChecks("/health");
+app.Run();
+```
+
+`Build()` always runs the same sequence: load configuration, add controllers, the invalid-model-state
+envelope (`options.UseInvalidModelStateEnvelope`, on by default) and Swagger, call `ConfigureServices`,
+build the app, then add `TraceActivityMiddleware`, `ExceptionMiddleware` and — once
+`AddTokenAuthentication` has been called — `AuthenticationMiddleware`, serve Swagger, add the extra
+`options.Middlewares`, and map the controllers. It returns the `WebApplication`, so further endpoints (health
+checks, minimal APIs) are mapped on it; `Run()`/`RunAsync()` build and run in one call when there are none.
+
+Every step is also a public extension in `ArturRios.Util.WebApi.Configuration`, so the same setup works on a
+plain `WebApplicationBuilder`:
+
+```csharp
+var parameters = new WebApiParameters(args);
+var builder = WebApplication.CreateBuilder(parameters.ToWebApplicationOptions());
+
+builder.LoadConfiguration(parameters);
+builder.Services.AddControllers();
+builder.Services.AddInvalidModelStateEnvelope();
+builder.AddWebApiSwagger(parameters, swagger => swagger.JwtAuthentication = true);
+builder.Services.AddTokenAuthentication(_ => { });
+
+var app = builder.Build();
+
+app.UseStandardMiddlewares(); // trace, exceptions, Swagger, CORS (when a policy is named), authentication
+app.UseWebApiMiddlewares(typeof(MyMiddleware));
+app.MapControllers();
+app.Run();
 ```
 
 Startup behavior can be tweaked without code changes via command-line args parsed by `WebApiParameters`
@@ -74,7 +91,7 @@ Startup behavior can be tweaked without code changes via command-line args parse
 `SwaggerEnvironments:[Development,Staging]`; keys are case-insensitive). `Environment:<name>` becomes the
 host environment, overriding `ASPNETCORE_ENVIRONMENT`. Swagger is enabled per environment: it is served in
 `Development` and `Local` by default, and the allowed environments can be overridden with the
-`SwaggerEnvironments:[...]` arg or by passing `allowedEnvironments` to `UseSwagger` / `UseSwaggerGen`;
+`SwaggerEnvironments:[...]` arg or with `options.Swagger.AllowedEnvironments`;
 `EnableSwaggerDocs:false` turns it off in every environment.
 
 ### Security
@@ -172,16 +189,26 @@ public class AccountsController : ControllerBase
 
 ### Middleware & diagnostics
 
-Register the built-in middlewares (each derives from `WebApiMiddleware`) in pipeline order with
-`AddMiddlewares` (or `App.UseWebApiMiddlewares(...)` outside `WebApiStartup`); a type that doesn't derive
-from `WebApiMiddleware` throws an `ArgumentException`:
+The built-in middlewares (each derives from `WebApiMiddleware`) are added in pipeline order by
+`UseStandardMiddlewares()`, which `WebApiStartup` calls for you:
+
+1. `TraceActivityMiddleware` — assigns/propagates a W3C trace id;
+2. `ExceptionMiddleware` — turns unhandled exceptions into a JSON error envelope;
+3. `AuthenticationMiddleware` — only when `AddTokenAuthentication` was registered.
+
+Your own `WebApiMiddleware` types run after them, in order — listed in `options.Middlewares`, or passed to
+`app.UseWebApiMiddlewares(...)` outside `WebApiStartup`; a type that doesn't derive from `WebApiMiddleware`
+throws an `ArgumentException`:
 
 ```csharp
-AddMiddlewares([
-    typeof(TraceActivityMiddleware), // assigns/propagates a W3C trace id
-    typeof(ExceptionMiddleware),     // turns unhandled exceptions into a JSON error envelope
-    typeof(AuthenticationMiddleware)
-]);
+public class Startup(string[] args) : WebApiStartup(args, options =>
+{
+    options.Middlewares.Add(typeof(RequestTimingMiddleware));
+    options.Middlewares.Add(typeof(TenantMiddleware));
+})
+{
+    // ...
+}
 ```
 
 `TraceActivityMiddleware` puts the current trace id on `HttpContext.TraceIdentifier` and
