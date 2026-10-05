@@ -12,46 +12,48 @@ public static class HttpContextExtensions
 {
     private const string BearerScheme = "Bearer";
 
-    /// <summary>Gets the authenticated user attached to the request.</summary>
     /// <param name="context">The current HTTP context.</param>
-    /// <returns>The authenticated user, or <see langword="null"/> if the request is not authenticated.</returns>
-    public static IAuthenticatedUser? GetUser(this HttpContext context) =>
-        context.Items[AuthenticationItemKeys.User] as IAuthenticatedUser;
-
-    /// <summary>Gets the authenticated user as the app's own identity type.</summary>
-    /// <typeparam name="TUser">The app's identity type.</typeparam>
-    /// <param name="context">The current HTTP context.</param>
-    /// <returns>The authenticated user, or <see langword="null"/> if the request is not authenticated or the
-    /// attached user is of another type.</returns>
-    public static TUser? GetUser<TUser>(this HttpContext context) where TUser : class, IAuthenticatedUser =>
-        context.Items[AuthenticationItemKeys.User] as TUser;
-
-    /// <summary>Extracts the raw authentication token from the <c>Authorization: Bearer</c> header, the named
-    /// cookie, or either (header first).</summary>
-    /// <param name="context">The current HTTP context.</param>
-    /// <param name="source">Where to read the token from.</param>
-    /// <param name="cookieName">The cookie name used when <paramref name="source"/> is <see cref="TokenSource.Cookie"/>
-    /// or <see cref="TokenSource.Either"/>.</param>
-    /// <returns>The token, or <see cref="string.Empty"/> when none is found.</returns>
-    public static string ExtractToken(this HttpContext context, TokenSource source, string cookieName)
+    extension(HttpContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        /// <summary>Gets the authenticated user attached to the request.</summary>
+        /// <returns>The authenticated user, or <see langword="null"/> if the request is not authenticated.</returns>
+        public IAuthenticatedUser? GetUser() =>
+            context.Items[AuthenticationItemKeys.User] as IAuthenticatedUser;
 
-        return source switch
+        /// <summary>Gets the authenticated user as the app's own identity type.</summary>
+        /// <typeparam name="TUser">The app's identity type.</typeparam>
+        /// <returns>The authenticated user, or <see langword="null"/> if the request is not authenticated or the
+        /// attached user is of another type.</returns>
+        public TUser? GetUser<TUser>() where TUser : class, IAuthenticatedUser =>
+            context.Items[AuthenticationItemKeys.User] as TUser;
+
+        /// <summary>Extracts the raw authentication token from the <c>Authorization: Bearer</c> header, the named
+        /// cookie, or either (header first).</summary>
+        /// <param name="source">Where to read the token from.</param>
+        /// <param name="cookieName">The cookie name used when <paramref name="source"/> is <see cref="TokenSource.Cookie"/>
+        /// or <see cref="TokenSource.Either"/>.</param>
+        /// <returns>The token, or <see cref="string.Empty"/> when none is found.</returns>
+        public string ExtractToken(TokenSource source, string cookieName)
         {
-            TokenSource.Header => TokenFromHeader(context),
-            TokenSource.Cookie => TokenFromCookie(context, cookieName),
-            TokenSource.Either => TokenFromHeader(context) is { Length: > 0 } header
-                ? header
-                : TokenFromCookie(context, cookieName),
-            _ => string.Empty
-        };
-    }
+            ArgumentNullException.ThrowIfNull(context);
 
-    /// <summary>Attaches <paramref name="user"/> to the request, where <see cref="GetUser"/> and the authorization
-    /// filters look for it.</summary>
-    internal static void SetUser(this HttpContext context, IAuthenticatedUser user) =>
-        context.Items[AuthenticationItemKeys.User] = user;
+            return source switch
+            {
+                TokenSource.Header => TokenFromHeader(context),
+                TokenSource.Cookie => TokenFromCookie(context, cookieName),
+                TokenSource.Either => TokenFromHeader(context) is { Length: > 0 } header
+                    ? header
+                    : TokenFromCookie(context, cookieName),
+                _ => string.Empty
+            };
+        }
+
+        /// <summary>Attaches <paramref name="user"/> to the request, where <c>GetUser</c> and the authorization
+        /// filters look for it.</summary>
+        /// <param name="user">The authenticated user.</param>
+        internal void SetUser(IAuthenticatedUser user) =>
+            context.Items[AuthenticationItemKeys.User] = user;
+    }
 
     private static string TokenFromHeader(HttpContext context)
     {

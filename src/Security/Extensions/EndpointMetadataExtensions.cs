@@ -8,11 +8,19 @@ namespace ArturRios.Util.WebApi.Security.Extensions;
 /// <see cref="Attributes.AllowAnonymousAttribute"/> or ASP.NET Core's own <c>[AllowAnonymous]</c>.</summary>
 internal static class EndpointMetadataExtensions
 {
-    /// <summary>Whether the endpoint carries <see cref="IAllowAnonymous"/> metadata.</summary>
-    public static bool AllowsAnonymous(this Endpoint? endpoint) =>
-        endpoint?.Metadata.GetMetadata<IAllowAnonymous>() is not null;
+    /// <param name="endpoint">The endpoint the request was routed to, if any.</param>
+    extension(Endpoint? endpoint)
+    {
+        /// <summary>Whether the endpoint carries <see cref="IAllowAnonymous"/> metadata.</summary>
+        public bool AllowsAnonymous() =>
+            endpoint?.Metadata.GetMetadata<IAllowAnonymous>() is not null;
+    }
 
-    /// <summary>Whether the action carries <see cref="IAllowAnonymous"/> metadata, at action or controller level.</summary>
-    public static bool AllowsAnonymous(this ActionDescriptor actionDescriptor) =>
-        actionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any();
+    /// <param name="actionDescriptor">The MVC action being authorized.</param>
+    extension(ActionDescriptor actionDescriptor)
+    {
+        /// <summary>Whether the action carries <see cref="IAllowAnonymous"/> metadata, at action or controller level.</summary>
+        public bool AllowsAnonymous() =>
+            actionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any();
+    }
 }
