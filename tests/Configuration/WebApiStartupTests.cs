@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace ArturRios.Util.WebApi.Tests.Configuration;
 
@@ -271,6 +272,24 @@ public sealed class WebApiStartupTests : IAsyncLifetime
         request.Headers.Add("X-Forwarded-For", "198.51.100.9");
 
         Assert.Equal("none", await (await client.SendAsync(request)).Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task GivenClientIpLoggingIsDisabledInTheOptions_WhenTheAppIsBuilt_ThenTheMiddlewareOptionsReflectIt()
+    {
+        TraceActivityOptions? resolved = null;
+
+        await Start(
+            configureOptions: options =>
+            {
+                options.TraceActivity.LogClientIp = false;
+                options.TraceActivity.TagClientAddress = false;
+            },
+            configureApp: app => resolved = app.Services.GetRequiredService<IOptions<TraceActivityOptions>>().Value);
+
+        Assert.NotNull(resolved);
+        Assert.False(resolved.LogClientIp);
+        Assert.False(resolved.TagClientAddress);
     }
 
     [Fact]

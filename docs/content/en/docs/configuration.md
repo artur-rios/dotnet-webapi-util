@@ -102,6 +102,8 @@ register the policy with `AddCors` in `ConfigureServices` and name it in `Option
 | `Swagger.AllowedEnvironments` | `EnvironmentType[]` | `[]` | The environments in which Swagger is generated and served. When empty, the `SwaggerEnvironments:[...]` arg decides, falling back to `Development` and `Local` (see [Swagger](#swagger--enabled-per-environment)). |
 | `Swagger.JwtAuthentication` | `bool` | `false` | Declares a JWT bearer security scheme in the document, so Swagger UI offers an "Authorize" button. |
 | `Swagger.ConfigureGenerator` | `Action<SwaggerGenOptions>?` | `null` | Further configures the Swagger generator (documents, filters, XML comments). |
+| `TraceActivity.LogClientIp` | `bool` | `true` | Whether `TraceActivityMiddleware` includes the client's IP address in its "Started request" log entry (see [The client IP address](../middleware-and-diagnostics/#the-client-ip-address)). |
+| `TraceActivity.TagClientAddress` | `bool` | `true` | Whether `TraceActivityMiddleware` tags the client's IP address on the request's activity as `client.address`. |
 | `UseInvalidModelStateEnvelope` | `bool` | `true` | Whether invalid model state is answered with the `DataOutput` envelope; `false` keeps ASP.NET Core's `ProblemDetails`. |
 | `CorsPolicy` | `string?` | `null` | Name of a CORS policy registered with `AddCors` in `ConfigureServices`; applied before authentication so preflight requests pass. |
 | `Middlewares` | `List<Type>` | empty | Extra `WebApiMiddleware` types, run in order after the standard middlewares and before the endpoints. |

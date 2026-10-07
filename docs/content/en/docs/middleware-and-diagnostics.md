@@ -141,6 +141,41 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 An IP address is personal data in many jurisdictions (for example under the GDPR); keep it in mind when
 deciding where these logs are shipped and how long they are kept.
 
+### Turning the client IP off
+
+Both uses of the address are controlled by `TraceActivityOptions` (`ArturRios.Util.WebApi.Middleware`), and
+both default to `true`:
+
+| Option | Default | Effect |
+|---|---|---|
+| `LogClientIp` | `true` | Includes the address in the start log. When `false`, the entry is `Started request with TraceId {TraceId}`, with no `ClientIp` property at all. |
+| `TagClientAddress` | `true` | Tags the address on the activity as `client.address`. |
+
+With `WebApiStartup`, set them on the startup options:
+
+```csharp
+public class Startup(string[] args) : WebApiStartup(args, options =>
+{
+    options.TraceActivity.LogClientIp = false;
+    options.TraceActivity.TagClientAddress = false;
+})
+{
+    // ...
+}
+```
+
+The middleware reads them from `IOptions<TraceActivityOptions>`, so on a plain builder — or to drive them from
+configuration — register them like any other options. A `Configure` call made in `ConfigureServices` runs after
+the startup options are applied, so it wins:
+
+```csharp
+builder.Services.Configure<TraceActivityOptions>(builder.Configuration.GetSection("TraceActivity"));
+```
+
+```json
+{ "TraceActivity": { "LogClientIp": false, "TagClientAddress": false } }
+```
+
 ```mermaid
 flowchart LR
     Req["Incoming request"] --> Check{"Activity.Current?"}

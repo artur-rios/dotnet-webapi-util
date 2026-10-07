@@ -4,6 +4,7 @@ using ArturRios.Util.WebApi.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace ArturRios.Util.WebApi.Tests.Middleware;
 
@@ -80,6 +81,54 @@ public class TraceActivityMiddlewareTests
 
         var entry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Information);
         Assert.Equal("unknown", entry.State["ClientIp"]);
+    }
+
+    [Fact]
+    public async Task GivenClientIpLoggingIsDisabled_WhenTheRequestStarts_ThenTheLogEntryOmitsTheClientIp()
+    {
+        var logger = new CapturingLogger();
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+        string? tagged = null;
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            tagged = Activity.Current?.GetTagItem("client.address") as string;
+
+            return Task.CompletedTask;
+        }, logger, Options.Create(new TraceActivityOptions { LogClientIp = false }));
+
+        Activity.Current = null;
+
+        await middleware.InvokeAsync(context);
+
+        var entry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Information);
+        Assert.DoesNotContain("203.0.113.7", entry.Message);
+        Assert.False(entry.State.ContainsKey("ClientIp"));
+        Assert.Equal(context.TraceIdentifier, entry.State["TraceId"]);
+        Assert.Equal("203.0.113.7", tagged);
+    }
+
+    [Fact]
+    public async Task GivenClientAddressTaggingIsDisabled_WhenTheRequestStarts_ThenTheActivityIsNotTagged()
+    {
+        var logger = new CapturingLogger();
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+        var tagged = "not-run";
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            tagged = Activity.Current?.GetTagItem("client.address") as string;
+
+            return Task.CompletedTask;
+        }, logger, Options.Create(new TraceActivityOptions { TagClientAddress = false }));
+
+        Activity.Current = null;
+
+        await middleware.InvokeAsync(context);
+
+        var entry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Information);
+        Assert.Equal("203.0.113.7", entry.State["ClientIp"]);
+        Assert.Null(tagged);
     }
 
     private sealed record LogEntry(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> State);
