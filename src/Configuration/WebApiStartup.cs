@@ -1,3 +1,4 @@
+using ArturRios.Util.WebApi.Middleware;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -76,6 +77,12 @@ public abstract class WebApiStartup
         }
 
         Builder.AddWebApiSwaggerWith(Parameters, Options.Swagger);
+
+        Builder.Services.Configure<TraceActivityOptions>(trace =>
+        {
+            trace.LogClientIp = Options.TraceActivity.LogClientIp;
+            trace.TagClientAddress = Options.TraceActivity.TagClientAddress;
+        });
 
         ConfigureServices(Builder);
 

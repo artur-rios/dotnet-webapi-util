@@ -2,6 +2,7 @@
 using ArturRios.Util.WebApi.Extensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ArturRios.Util.WebApi.Middleware;
 
@@ -12,12 +13,19 @@ namespace ArturRios.Util.WebApi.Middleware;
 /// <c>traceparent</c>/<c>tracestate</c> pair becomes its parent, so the caller's trace continues. Logs the start of
 /// each request at <see cref="LogLevel.Information"/> with its trace id and the client's IP address (see
 /// <see cref="HttpContextClientExtensions.GetClientIpAddress"/>), which is also tagged on the activity as
-/// <c>client.address</c>.
+/// <c>client.address</c>. Both uses of the IP address can be turned off through <see cref="TraceActivityOptions"/>.
 /// </summary>
 /// <param name="next">The next middleware in the pipeline.</param>
 /// <param name="logger">Used to log the start and end of each request's trace.</param>
-public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivityMiddleware> logger) : WebApiMiddleware
+/// <param name="options">Controls whether the client's IP address is logged and tagged; when <see langword="null"/>,
+/// the <see cref="TraceActivityOptions"/> defaults apply.</param>
+public class TraceActivityMiddleware(
+    RequestDelegate next,
+    ILogger<TraceActivityMiddleware> logger,
+    IOptions<TraceActivityOptions>? options = null) : WebApiMiddleware
 {
+    private readonly TraceActivityOptions _options = options?.Value ?? new TraceActivityOptions();
+
     private const string ActivityName = "ServerReceive";
     private const string ClientAddressTag = "client.address";
     private const string UnknownClientIp = "unknown";
@@ -48,15 +56,22 @@ public class TraceActivityMiddleware(RequestDelegate next, ILogger<TraceActivity
         context.Items[TraceIdItemKey] = traceId;
         context.Response.Headers[TraceParentHeader] = activity.ToTraceParent();
 
-        var clientIp = context.GetClientIpAddress();
+        var clientIp = _options.LogClientIp || _options.TagClientAddress ? context.GetClientIpAddress() : null;
 
-        if (clientIp is not null)
+        if (_options.TagClientAddress && clientIp is not null)
         {
             activity.SetTag(ClientAddressTag, clientIp);
         }
 
-        logger.LogInformation("Started request with TraceId {TraceId} from {ClientIp}", traceId,
-            clientIp ?? UnknownClientIp);
+        if (_options.LogClientIp)
+        {
+            logger.LogInformation("Started request with TraceId {TraceId} from {ClientIp}", traceId,
+                clientIp ?? UnknownClientIp);
+        }
+        else
+        {
+            logger.LogInformation("Started request with TraceId {TraceId}", traceId);
+        }
 
         try
         {

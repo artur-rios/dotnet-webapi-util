@@ -221,6 +221,23 @@ builder.Services.AddHttpClient<MyApiClient>()
     .AddTracePropagation();
 ```
 
+It also logs the client's IP address with each request and tags it on the activity as `client.address`.
+Both are on by default and can be turned off, for example where IP addresses count as personal data:
+
+```csharp
+public class Startup(string[] args) : WebApiStartup(args, options =>
+{
+    options.TraceActivity.LogClientIp = false;      // log only the trace id
+    options.TraceActivity.TagClientAddress = false; // don't tag client.address
+})
+{
+    // ...
+}
+```
+
+Outside `WebApiStartup`, configure `TraceActivityOptions` like any options type
+(`builder.Services.Configure<TraceActivityOptions>(...)`).
+
 ### HTTP client
 
 Derive `BaseWebApiClient` for the client and `BaseWebApiClientRoute` for each group of related routes:
