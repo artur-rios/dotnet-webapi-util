@@ -26,6 +26,8 @@ builder.Services.AddTokenAuthentication(options =>
     options.EnableGoogle = true;          // default: false
     options.GoogleClientIds = ["your-google-oauth-client-id"];
     options.JwtMode = JwtValidationMode.ClaimsOnly; // or Revalidate — default: ClaimsOnly
+    options.ValidateIssuer = true;        // default: false — see "Issuer and audience"
+    options.ValidateAudience = true;      // default: false
 });
 ```
 
@@ -37,7 +39,10 @@ in). Calling it more than once doesn't register a validator twice. It throws an 
 - `EnableGoogle` is `true` but `GoogleClientIds` is empty.
 
 The app must still separately register `JwtConfiguration`/`JwtHandler` (for the JWT scheme) and, when
-required (see below), an `IAuthenticationProvider`.
+required (see below), an `IAuthenticationProvider`. Because `JwtConfiguration` is registered separately, the
+issuer/audience settings are checked against it when the application starts rather than here: with
+`ValidateIssuer` or `ValidateAudience` on and the matching `JwtConfiguration.Issuer`/`Audience` blank,
+`app.StartAsync()`/`Run()` throws an `InvalidOperationException` naming the setting.
 
 Calling `AddTokenAuthentication` is also what puts `AuthenticationMiddleware` on the pipeline:
 `UseStandardMiddlewares()` — which `WebApiStartup` runs for you — adds it after `TraceActivityMiddleware`,
@@ -90,6 +95,36 @@ then resolved is controlled by `AuthenticationOptions.JwtMode`:
   scoped service) and its `GetAuthenticatedUserById` is called. This guarantees freshness — a deleted or
   role-changed user is rejected or updated on the very next request — at the cost of one lookup per
   request. An `IAuthenticationProvider` **must** be registered for this mode.
+
+## Issuer and audience
+
+`JwtHandler.IsTokenValidAsync` checks the signature (and lifetime) only. By default `JwtTokenValidator` does
+not look at the token's `iss` and `aud` claims either, so **any token signed with an accepted key is accepted,
+whatever issuer or audience it names**. That is safe while the signing key is this API's alone. When the key is
+shared — several services or audiences signing with one secret, or a key set reused across environments — a
+token minted for one of them is accepted by all of them. Turn the checks on in that case:
+
+```csharp
+builder.Services.AddSingleton(new JwtConfiguration(3600, "my-api", "my-app", secret, []));
+builder.Services.AddSingleton<JwtHandler>();
+builder.Services.AddTokenAuthentication(options =>
+{
+    options.ValidateIssuer = true;   // iss must equal JwtConfiguration.Issuer
+    options.ValidateAudience = true; // aud must include JwtConfiguration.Audience
+});
+```
+
+- **`ValidateIssuer`** (default `false`) — the token's `iss` must equal `JwtConfiguration.Issuer`, compared
+  ordinally (case-sensitive, no trimming). A missing or different issuer fails with `"Invalid token issuer"`.
+- **`ValidateAudience`** (default `false`) — one of the token's `aud` values must equal
+  `JwtConfiguration.Audience`, compared ordinally. A missing or different audience fails with
+  `"Invalid token audience"`.
+
+Both run only after the signature has been verified, so a forged token still fails with `"Invalid token"`.
+`JwtHandler.CreateToken` writes `JwtConfiguration.Issuer`/`Audience` into the tokens it mints, so an API that
+issues and validates its own tokens with one `JwtConfiguration` passes both checks without further changes.
+Turning a check on with the matching value blank is a configuration error, and the application fails to start
+(see `AddTokenAuthentication` above). Leaving both off keeps the behavior of 5.1 and earlier; added in 5.2.0.
 
 ## Rotating the signing key
 
@@ -316,32 +351,5 @@ revocations bounded.
 
 ## Migrating from 2.x
 
-`3.0.0` makes the authenticated-user type and the token's claim keys caller-defined. Where the library
-used to hard-code `AuthenticatedUser(int Id, int Role)`, it now only knows `IAuthenticatedUser` (`Guid
-Id`, `int RoleId`) — implement your own, or keep using the library's `AuthenticatedUser(Guid Id, int
-RoleId)`.
-
-| Before | After |
-|---|---|
-| `AuthenticatedUser(int Id, int Role)` | `AuthenticatedUser(Guid Id, int RoleId)`, or your own `IAuthenticatedUser` |
-| `user.Role` | `user.RoleId` |
-| `TokenClaimKeys.Role` | `TokenClaimKeys.RoleId` — the claim string is still `"role"` |
-| `GetAuthenticatedUserById(int id)` returning `AuthenticatedUser?` | `GetAuthenticatedUserById(Guid id)` returning `IAuthenticatedUser?` |
-| `GetAuthenticatedUserByEmail(string email)` returning `AuthenticatedUser?` | same parameter, now returning `IAuthenticatedUser?` |
-| `TokenValidationResult(AuthenticatedUser?, string?)` | `TokenValidationResult(IAuthenticatedUser?, string?)` — affects custom `ITokenValidator` implementations |
-| `user.ToTokenClaims()` | `mapper.ToClaims(user)` |
-| `AuthenticatedUserFactory.FromToken(token)` | `TokenClaimsReader.Read(token)` then `mapper.FromClaims(claims)` |
-| `(AuthenticatedUser?)HttpContext.Items["User"]` | `HttpContext.GetUser<MyUser>()` |
-
-Two things to plan around before you deploy this upgrade:
-
-**Tokens issued by 2.x are rejected after the upgrade.** The claim key strings are unchanged, so the
-claims still *read* — but `DefaultAuthenticatedUserMapper` requires the `id` claim to parse as a `Guid`,
-and 2.x wrote an integer there. Every unexpired access token therefore fails with a 401
-(`"Could not retrieve user from token"`, or `"Could not retrieve user id from token"` in `Revalidate`
-mode). This is fail-closed and safe, but it logs every user out at the moment of deployment. Plan for
-it: drain the old tokens before switching over, accept the forced re-authentication, or ship a mapper
-that accepts both an integer and a `Guid` in the `id` claim for one release.
-
-**User ids must become `Guid`s.** If your store keys users by integer, this is a data migration, not
-just a compile fix.
+What changed in 3.0 for the authenticated user and the token claims, and what to plan for before deploying the
+upgrade, is described in [Upgrading from 2.x to 3.0](../changelog/#upgrading-from-2x-to-30) in the changelog.
