@@ -126,9 +126,10 @@ classDiagram
         +WithData(T) DataOutput~T~
     }
     class PaginatedOutput~T~ {
-        +int Page
+        +int PageNumber
         +int PageSize
-        +int TotalCount
+        +int TotalItems
+        +int TotalPages
     }
     ProcessOutput <|-- DataOutput
     DataOutput <|-- PaginatedOutput

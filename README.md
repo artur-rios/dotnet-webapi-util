@@ -1,14 +1,14 @@
 # ArturRios.Util.WebApi
 
 [![Docs](https://img.shields.io/badge/docs-website-blue)](https://artur-rios.github.io/dotnet-webapi-util)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/artur-rios/dotnet-webapi-util/blob/main/LICENSE)
 [![NuGet](https://img.shields.io/nuget/v/ArturRios.Util.WebApi.svg)](https://www.nuget.org/packages/ArturRios.Util.WebApi)
 
 Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
 (configuration, Swagger, middleware pipeline), token authentication (app JWT and/or Google ID tokens, read
 from the header, a cookie, or either) with stateless-or-revalidating user resolution and role-based
 authorization, cross-cutting middleware for exceptions and distributed tracing, a thin typed-`HttpClient`
-base for calling other services, and a resolver that turns `ArturRios.Output` envelopes into
+base for calling other services, and `ToActionResult` extensions that turn `ArturRios.Output` envelopes into
 `ActionResult`s.
 
 ## Installation
@@ -114,11 +114,16 @@ builder.Services.AddTokenAuthentication(options =>
     options.EnableGoogle = true;          // default: false
     options.GoogleClientIds = ["your-google-oauth-client-id"];
     options.JwtMode = JwtValidationMode.ClaimsOnly; // or Revalidate
+    options.ValidateIssuer = true;        // default: false
+    options.ValidateAudience = true;      // default: false
 });
 ```
 
 At least one of `EnableJwt`/`EnableGoogle` must be enabled, and `EnableGoogle` requires at least one
-entry in `GoogleClientIds` — `AddTokenAuthentication` throws otherwise. A request may carry either kind of
+entry in `GoogleClientIds` — `AddTokenAuthentication` throws otherwise. By default only the app JWT's
+signature is checked; `ValidateIssuer`/`ValidateAudience` also require its `iss`/`aud` to match
+`JwtConfiguration.Issuer`/`Audience` — turn them on whenever the signing key is shared with another issuer or
+audience. Turning one on while the matching `JwtConfiguration` value is blank fails the application's startup. A request may carry either kind of
 token: validators run in registration order (app JWT first, then Google), and the first one that resolves
 a user wins.
 
@@ -146,7 +151,8 @@ whenever `EnableGoogle` is `true`, as it is for JWT `Revalidate` mode. To accept
 
 1. Add the `Google.Apis.Auth` package (already a dependency of this library, so it resolves
    transitively — add it explicitly only if you call its APIs directly).
-2. Set `EnableGoogle = true` and `GoogleClientIds` to your app's OAuth client ID(s) on the web api options.
+2. Set `EnableGoogle = true` and `GoogleClientIds` to your app's OAuth client ID(s) in the `AddTokenAuthentication`
+   callback (`AuthenticationOptions`).
 3. Implement `IAuthenticationProvider.GetAuthenticatedUserByEmail(string)` (and register the provider,
    optionally via `AddCachedAuthenticationProvider<T>`, below).
 
@@ -221,7 +227,8 @@ builder.Services.AddHttpClient<MyApiClient>()
     .AddTracePropagation();
 ```
 
-It also logs the client's IP address with each request and tags it on the activity as `client.address`.
+`TraceActivityMiddleware` also logs the client's IP address with each request and tags it on the activity as
+`client.address`.
 Both are on by default and can be turned off, for example where IP addresses count as personal data:
 
 ```csharp
@@ -318,59 +325,21 @@ code (`Void`), the action's default return value (`Default`), a `ProcessOutput` 
 
 Full documentation, including architecture diagrams: **<https://artur-rios.github.io/dotnet-webapi-util>**
 
-## Testing
+## Upgrading
 
-The test suite is xUnit, and every test is named with the Given / When / Then pattern. Every test class
-carries a `Category` trait, so the two kinds can be run — and reported — separately:
+- From 2.x to 3.0: [Upgrading from 2.x to 3.0](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CHANGELOG.md#upgrading-from-2x-to-30)
 
-```bash
-dotnet test src/ArturRios.Util.WebApi.sln --filter "Category=Unit"
-dotnet test src/ArturRios.Util.WebApi.sln --filter "Category=Functional"
-```
+## Changelog
 
-Unit tests exercise the code in isolation against test doubles.
-Functional tests run the trace, exception and authentication middlewares together in a real ASP.NET Core host and drive real HTTP requests through it.
-CI runs the two as separate jobs, and both must pass before a pull request can be merged.
+Notable changes in each release are recorded in [CHANGELOG.md](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CHANGELOG.md). Releases follow
+[Semantic Versioning](https://semver.org/).
 
-## Branching and releases
+## Contributing
 
-`develop` is the integration branch and the base for all new work; `main` only holds released code.
-
-1. Branch off `develop` — `feature/<name>` for features, `fix/<name>` for fixes (`chore/`, `refactor/`, `docs/`,
-   `ci/`, `test/`, `perf/` and `build/` are accepted too) — and open a pull request back into `develop`.
-2. To release, cut `release/<version>` from `develop`, set `<Version>` in `src/ArturRios.Util.WebApi.csproj` to that version
-   and open a pull request into `main`. Only `release/*` branches can be merged into `main`.
-3. Once it is merged, tag the merge commit on `main` with the version. Pushing the tag publishes the package to
-   nuget.org and GitHub Packages:
-
-   ```bash
-   git switch main && git pull
-   git tag <version> && git push origin <version>
-   ```
-
-4. Open a pull request from `main` into `develop` to bring the release back into the integration branch.
-
-Pull requests into `develop` and `main` must pass the tests and the branch policy check. Only the repository owner can
-push version tags, and the publish workflow rejects tags that do not point at a commit on `main`.
-
-## Versioning
-
-Semantic Versioning (SemVer). Breaking changes result in a new major version. New methods or non-breaking behavior
-changes increment the minor version; fixes or tweaks increment the patch.
-
-Version 2.0 renamed the `ArturRios.Util.WebApi.Api.Configuration` and `ArturRios.Util.WebApi.Api.Client`
-namespaces to `ArturRios.Util.WebApi.Configuration` and `ArturRios.Util.WebApi.Client`.
-
-## Build, test and publish
-
-Use the official [.NET CLI](https://learn.microsoft.com/en-us/dotnet/core/tools/) to build, test and publish the project
-and Git for source control.
-If you want, optional helper toolsets I built to facilitate these tasks are available:
-
-- [Dotnet Tools](https://github.com/artur-rios/dotnet-tools)
-- [Python Dotnet Tools](https://github.com/artur-rios/python-dotnet-tools)
+Building from source, running the tests, the branching model and the release process are described in
+[CONTRIBUTING.md](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CONTRIBUTING.md).
 
 ## Legal Details
 
 This project is licensed under the [MIT License](https://en.wikipedia.org/wiki/MIT_License). A copy of the license is
-available at [LICENSE](./LICENSE) in the repository.
+available at [LICENSE](https://github.com/artur-rios/dotnet-webapi-util/blob/main/LICENSE) in the repository.

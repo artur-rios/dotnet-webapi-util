@@ -3,15 +3,15 @@ title: Documentation
 linkTitle: Documentation
 weight: 20
 description: >-
-  A typical request set up with the built-in middlewares flows through tracing, exception handling and authentication before it reaches your endpoint:
+  Building blocks for ASP.NET Core web APIs in .NET: host bootstrapping, token authentication with role-based authorization, exception and tracing middleware, typed HTTP clients, and ActionResult mapping for ArturRios.Output envelopes.
 ---
 
 **`ArturRios.Util.WebApi`** is a set of building blocks for ASP.NET Core web APIs in .NET. It bundles a
 base class for bootstrapping the host (configuration, Swagger, middleware pipeline), token authentication
 that reads the token from the header, a cookie, or either and validates it as the app's own JWT and/or a
 Google ID token (with role-based authorization), cross-cutting middleware for exceptions and distributed
-tracing, a thin typed-`HttpClient` base for calling other services, and a resolver that turns
-`ArturRios.Output` envelopes into `ActionResult`s.
+tracing, a thin typed-`HttpClient` base for calling other services, and `ToActionResult`
+extensions that turn `ArturRios.Output` envelopes into `ActionResult`s.
 
 ## Request pipeline
 
@@ -66,6 +66,8 @@ exceptions.
 - **[Responses](responses/)** — resolving `ArturRios.Output` envelopes into `ActionResult`s.
 - **[Endpoint Toggling](endpoint-toggle/)** — enabling or disabling individual endpoints from code or
   configuration.
+- **[Changelog](changelog/)** — notable changes in each release, including the upgrade notes for breaking
+  releases.
 
 The source lives at [github.com/artur-rios/dotnet-webapi-util](https://github.com/artur-rios/dotnet-webapi-util),
 licensed under the MIT License.
