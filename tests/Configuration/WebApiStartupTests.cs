@@ -204,6 +204,24 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GivenJwtAuthenticationInTheSwaggerOptions_WhenTheDocumentIsRequested_ThenItRequiresTheBearerScheme()
+    {
+        var client = await Start("Development", options => options.Swagger.JwtAuthentication = true);
+
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
+        var root = document.RootElement;
+
+        Assert.Equal("http",
+            root.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("type")
+                .GetString());
+
+        // An empty requirement ({}) tells Swagger UI the operations need no credentials, so the token entered
+        // under "Authorize" would never be sent.
+        var requirement = Assert.Single(root.GetProperty("security").EnumerateArray());
+        Assert.True(requirement.TryGetProperty("Bearer", out _), requirement.ToString());
+    }
+
+    [Fact]
     public async Task GivenTokenAuthenticationIsRegistered_WhenASecuredActionIsCalledWithoutAToken_ThenUnauthorizedArrives()
     {
         var client = await Start(configureServices: AddJwtAuthentication);

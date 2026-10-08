@@ -86,6 +86,30 @@ public class ExceptionEnvelopeTests
         Assert.Equal(503, context.Response.StatusCode);
     }
 
+    [Theory]
+    [InlineData(StatusCodes.Status400BadRequest, "Bad Request")]
+    [InlineData(StatusCodes.Status413PayloadTooLarge, "Payload Too Large")]
+    public async Task GivenABadHttpRequestException_WhenTheRequestIsProcessed_ThenItsOwnStatusCodeIsUsed(
+        int statusCode, string reason)
+    {
+        // Kestrel throws it for client faults - a body over MaxRequestBodySize, a malformed chunked body - and
+        // answers with its StatusCode when it escapes the app. Turning it into a 500 blamed the server.
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+
+        await new ExceptionMiddleware(
+            _ => throw new BadHttpRequestException("Request body too large. The max is 10 bytes.", statusCode),
+            NullLogger<ExceptionMiddleware>.Instance).InvokeAsync(context);
+
+        Assert.Equal(statusCode, context.Response.StatusCode);
+
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+        var output = JsonSerializer.Deserialize<DataOutput<string>>(
+            await new StreamReader(context.Response.Body).ReadToEndAsync(), JsonSerializerOptions.Web)!;
+
+        Assert.False(output.Success);
+        Assert.Equal([reason], output.Errors);
+    }
+
     [Fact]
     public async Task GivenAnUnhandledException_WhenTheEnvelopeIsWritten_ThenItsPropertiesAreCamelCasedLikeMvcs()
     {
