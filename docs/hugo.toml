@@ -36,6 +36,18 @@ locale = 'en-us'
   [[module.mounts]]
     source = 'static'
     target = 'static'
+  # Mounting into assets/ (below) replaces Hugo's default assets mount; keep the project's own.
+  [[module.mounts]]
+    source = 'assets'
+    target = 'assets'
+  # CHANGELOG.md and CONTRIBUTING.md live at the repository root; the site renders them
+  # (see layouts/_shortcodes/repo-file.html) instead of keeping copies.
+  [[module.mounts]]
+    source = '../CHANGELOG.md'
+    target = 'assets/repo/CHANGELOG.md'
+  [[module.mounts]]
+    source = '../CONTRIBUTING.md'
+    target = 'assets/repo/CONTRIBUTING.md'
 
 [languages]
   [languages.en]
@@ -43,7 +55,7 @@ locale = 'en-us'
     weight = 1
     title = 'Dotnet WebApi Util'
     [languages.en.params]
-      description = "A typical request set up with the built-in middlewares flows through tracing, exception handling and authentication before it reaches your endpoint:"
+      description = "Building blocks for ASP.NET Core web APIs in .NET: host bootstrapping, token authentication with role-based authorization, exception and tracing middleware, typed HTTP clients, and ActionResult mapping for ArturRios.Output envelopes."
 
 [params]
   copyright.authors = 'Artur Rios | [MIT License](https://github.com/artur-rios/dotnet-webapi-util/blob/main/LICENSE)'
