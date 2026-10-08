@@ -9,6 +9,7 @@ using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Extensions;
 using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Attributes;
+using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -204,6 +205,24 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GivenJwtAuthenticationInTheSwaggerOptions_WhenTheDocumentIsRequested_ThenItRequiresTheBearerScheme()
+    {
+        var client = await Start("Development", options => options.Swagger.JwtAuthentication = true);
+
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
+        var root = document.RootElement;
+
+        Assert.Equal("http",
+            root.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("type")
+                .GetString());
+
+        // An empty requirement ({}) tells Swagger UI the operations need no credentials, so the token entered
+        // under "Authorize" would never be sent.
+        var requirement = Assert.Single(root.GetProperty("security").EnumerateArray());
+        Assert.True(requirement.TryGetProperty("Bearer", out _), requirement.ToString());
+    }
+
+    [Fact]
     public async Task GivenTokenAuthenticationIsRegistered_WhenASecuredActionIsCalledWithoutAToken_ThenUnauthorizedArrives()
     {
         var client = await Start(configureServices: AddJwtAuthentication);
@@ -364,11 +383,68 @@ public sealed class WebApiStartupTests : IAsyncLifetime
         Assert.True(settings.GetBool(AppSettingsKeys.SwaggerEnabled));
     }
 
-    private static void AddJwtAuthentication(WebApplicationBuilder builder)
+    [Fact]
+    public async Task GivenValidateIssuerWithNoConfiguredIssuer_WhenTheAppStarts_ThenStartupFailsWithAClearError()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => Start(configureServices: builder =>
+            AddJwtAuthenticationWith(builder, issuer: string.Empty, configure: options => options.ValidateIssuer = true)));
+
+        Assert.Contains("ValidateIssuer", exception.Message);
+        Assert.Contains("JwtConfiguration.Issuer", exception.Message);
+    }
+
+    [Fact]
+    public async Task GivenValidateAudienceWithNoConfiguredAudience_WhenTheAppStarts_ThenStartupFailsWithAClearError()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => Start(configureServices: builder =>
+            AddJwtAuthenticationWith(builder, audience: " ", configure: options => options.ValidateAudience = true)));
+
+        Assert.Contains("ValidateAudience", exception.Message);
+        Assert.Contains("JwtConfiguration.Audience", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("issuer", "audience", HttpStatusCode.OK)]
+    [InlineData("someone-else", "audience", HttpStatusCode.Unauthorized)]
+    [InlineData("issuer", "another-app", HttpStatusCode.Unauthorized)]
+    public async Task GivenIssuerAndAudienceChecks_WhenATokenIsSent_ThenOnlyOneForThisIssuerAndAudienceIsAccepted(
+        string issuer, string audience, HttpStatusCode expected)
+    {
+        var client = await Start(configureServices: builder => AddJwtAuthenticationWith(builder, configure: options =>
+        {
+            options.ValidateIssuer = true;
+            options.ValidateAudience = true;
+        }));
+
+        var token = new JwtHandler().CreateToken(new JwtConfiguration(3600, issuer, audience, Secret,
+            new Dictionary<string, string> { { "id", Guid.NewGuid().ToString() }, { "role", "1" } }));
+        var request = new HttpRequestMessage(HttpMethod.Get, "/samples/secure");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        Assert.Equal(expected, (await client.SendAsync(request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task GivenDefaultAuthenticationOptions_WhenATokenForAnotherIssuerAndAudienceIsSent_ThenItIsAccepted()
+    {
+        var client = await Start(configureServices: AddJwtAuthentication);
+
+        var token = new JwtHandler().CreateToken(new JwtConfiguration(3600, "someone-else", "another-app", Secret,
+            new Dictionary<string, string> { { "id", Guid.NewGuid().ToString() }, { "role", "1" } }));
+        var request = new HttpRequestMessage(HttpMethod.Get, "/samples/secure");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
+    }
+
+    private static void AddJwtAuthentication(WebApplicationBuilder builder) => AddJwtAuthenticationWith(builder);
+
+    private static void AddJwtAuthenticationWith(WebApplicationBuilder builder, string issuer = "issuer",
+        string audience = "audience", Action<AuthenticationOptions>? configure = null)
     {
         builder.Services.AddSingleton(
-            new JwtConfiguration(3600, "issuer", "audience", Secret, new Dictionary<string, string>()));
+            new JwtConfiguration(3600, issuer, audience, Secret, new Dictionary<string, string>()));
         builder.Services.AddSingleton<JwtHandler>();
-        builder.Services.AddTokenAuthentication(_ => { });
+        builder.Services.AddTokenAuthentication(configure ?? (_ => { }));
     }
 }

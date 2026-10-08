@@ -313,4 +313,161 @@ public class JwtTokenValidatorTests
 
         Assert.NotNull(result.User);
     }
+
+    // Issuer and audience. ArturRios.Jwt checks only the signature, so a token minted for another
+    // issuer or audience under a shared secret is accepted unless the app opts in to checking those claims.
+
+    private static string TokenFrom(string issuer, string audience) =>
+        new JwtHandler().CreateToken(new JwtConfiguration(3600, issuer, audience, Secret,
+            new DefaultAuthenticatedUserMapper().ToClaims(new AuthenticatedUser(UserId, 3))));
+
+    private static JwtTokenValidator Validator(bool validateIssuer, bool validateAudience,
+        JwtConfiguration? configuration = null) =>
+        new(configuration ?? Config(), new JwtHandler(), new DefaultAuthenticatedUserMapper(),
+            new AuthenticationOptions { ValidateIssuer = validateIssuer, ValidateAudience = validateAudience });
+
+    [Fact]
+    public void GivenDefaultOptions_WhenCreated_ThenIssuerAndAudienceAreNotValidated()
+    {
+        var options = new AuthenticationOptions();
+
+        Assert.False(options.ValidateIssuer);
+        Assert.False(options.ValidateAudience);
+    }
+
+    [Fact]
+    public async Task GivenDefaultOptions_WhenValidatingATokenForAnotherIssuerAndAudience_ThenItIsStillAccepted()
+    {
+        // The default keeps the pre-5.2 behavior: only the signature is checked.
+        var token = TokenFrom("someone-else", "another-app");
+
+        var result = await Validator(JwtValidationMode.ClaimsOnly).ValidateAsync(token, ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public async Task GivenValidateIssuer_WhenValidatingATokenFromTheConfiguredIssuer_ThenItIsAccepted()
+    {
+        var result = await Validator(validateIssuer: true, validateAudience: false)
+            .ValidateAsync(TokenFrom("issuer", "another-app"), ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+    }
+
+    [Theory]
+    [InlineData("someone-else")]
+    [InlineData("ISSUER")]
+    [InlineData("issuer ")]
+    public async Task GivenValidateIssuer_WhenValidatingATokenFromAnotherIssuer_ThenItIsRejected(string issuer)
+    {
+        var result = await Validator(validateIssuer: true, validateAudience: false)
+            .ValidateAsync(TokenFrom(issuer, "audience"), ContextWithProvider(null));
+
+        Assert.Null(result.User);
+        Assert.Equal("Invalid token issuer", result.Error);
+    }
+
+    [Fact]
+    public async Task GivenValidateIssuer_WhenValidatingATokenWithNoIssuer_ThenItIsRejected()
+    {
+        var result = await Validator(validateIssuer: true, validateAudience: false)
+            .ValidateAsync(TokenFrom(string.Empty, "audience"), ContextWithProvider(null));
+
+        Assert.Null(result.User);
+        Assert.Equal("Invalid token issuer", result.Error);
+    }
+
+    [Fact]
+    public async Task GivenValidateAudience_WhenValidatingATokenForTheConfiguredAudience_ThenItIsAccepted()
+    {
+        var result = await Validator(validateIssuer: false, validateAudience: true)
+            .ValidateAsync(TokenFrom("someone-else", "audience"), ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+    }
+
+    [Theory]
+    [InlineData("another-app")]
+    [InlineData("AUDIENCE")]
+    public async Task GivenValidateAudience_WhenValidatingATokenForAnotherAudience_ThenItIsRejected(string audience)
+    {
+        var result = await Validator(validateIssuer: false, validateAudience: true)
+            .ValidateAsync(TokenFrom("issuer", audience), ContextWithProvider(null));
+
+        Assert.Null(result.User);
+        Assert.Equal("Invalid token audience", result.Error);
+    }
+
+    [Fact]
+    public async Task GivenValidateAudience_WhenValidatingATokenWithNoAudience_ThenItIsRejected()
+    {
+        var result = await Validator(validateIssuer: false, validateAudience: true)
+            .ValidateAsync(TokenFrom("issuer", string.Empty), ContextWithProvider(null));
+
+        Assert.Null(result.User);
+        Assert.Equal("Invalid token audience", result.Error);
+    }
+
+    [Fact]
+    public async Task GivenBothChecks_WhenValidatingATokenMatchingBoth_ThenItIsAccepted()
+    {
+        var result = await Validator(validateIssuer: true, validateAudience: true)
+            .ValidateAsync(TokenFrom("issuer", "audience"), ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+        Assert.Equal(UserId, result.User!.Id);
+    }
+
+    [Fact]
+    public async Task GivenBothChecks_WhenValidatingATokenWithABadSignature_ThenTheSignatureErrorWins()
+    {
+        // The claims of an unsigned token are attacker-controlled, so they are not even looked at.
+        var forged = new JwtHandler().CreateToken(new JwtConfiguration(3600, "issuer", "audience",
+            "a-different-signing-key-with-enough-length-0987654321", new Dictionary<string, string>()));
+
+        var result = await Validator(validateIssuer: true, validateAudience: true)
+            .ValidateAsync(forged, ContextWithProvider(null));
+
+        Assert.Null(result.User);
+        Assert.Equal("Invalid token", result.Error);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GivenValidateIssuerAndNoConfiguredIssuer_WhenCreated_ThenItThrows(string issuer)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Validator(validateIssuer: true, validateAudience: false, Config() with { Issuer = issuer }));
+
+        Assert.Contains("ValidateIssuer", exception.Message);
+        Assert.Contains("JwtConfiguration.Issuer", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GivenValidateAudienceAndNoConfiguredAudience_WhenCreated_ThenItThrows(string audience)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Validator(validateIssuer: false, validateAudience: true, Config() with { Audience = audience }));
+
+        Assert.Contains("ValidateAudience", exception.Message);
+        Assert.Contains("JwtConfiguration.Audience", exception.Message);
+    }
+
+    [Fact]
+    public async Task GivenNoChecksAndNoConfiguredIssuerOrAudience_WhenCreated_ThenItStillWorks()
+    {
+        // heimdall-api builds its JwtConfiguration from environment variables that may be unset; with the
+        // checks off, blank values must stay legal.
+        var configuration = Config() with { Issuer = string.Empty, Audience = string.Empty };
+
+        var result = await Validator(validateIssuer: false, validateAudience: false, configuration)
+            .ValidateAsync(TokenFrom("issuer", "audience"), ContextWithProvider(null));
+
+        Assert.NotNull(result.User);
+    }
 }

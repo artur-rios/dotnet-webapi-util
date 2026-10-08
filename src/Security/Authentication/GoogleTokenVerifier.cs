@@ -22,7 +22,12 @@ public class GoogleTokenVerifier : IGoogleTokenVerifier
 
             return new GoogleTokenPayload(payload.Email ?? string.Empty, payload.Subject ?? string.Empty, payload.EmailVerified);
         }
-        catch (InvalidJwtException)
+        // A token that is not a well-formed JWS at all - bad base64url, a segment that is not JSON - makes
+        // GoogleJsonWebSignature throw the decoder's own exception instead of InvalidJwtException. Any such
+        // token is just not a valid Google token, so it is a 401, not a 500. Failures fetching Google's keys
+        // (HttpRequestException) still propagate: those are the server's problem, not the caller's.
+        catch (Exception exception) when (exception is InvalidJwtException or FormatException or ArgumentException
+                                              or Newtonsoft.Json.JsonException)
         {
             return null;
         }
