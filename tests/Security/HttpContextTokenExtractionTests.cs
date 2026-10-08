@@ -1,5 +1,5 @@
-using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Enums;
+using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Http;
 
 namespace ArturRios.Util.WebApi.Tests.Security;
