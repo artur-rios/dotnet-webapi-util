@@ -70,4 +70,4 @@ exceptions.
   releases.
 
 The source lives at [github.com/artur-rios/dotnet-webapi-util](https://github.com/artur-rios/dotnet-webapi-util),
-licensed under the MIT License.
+licensed under the Artur Rios Attribution License.
