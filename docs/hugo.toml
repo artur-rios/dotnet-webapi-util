@@ -1,4 +1,4 @@
-baseURL = 'https://artur-rios.github.io/dotnet-webapi-util/'
+baseURL = 'https://docs.artur-rios.tech/dotnet-webapi-util/'
 title = 'Dotnet WebApi Util'
 
 # Docsy is installed as the @docsy/theme NPM package (see package.json)

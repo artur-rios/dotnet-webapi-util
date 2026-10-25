@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   on while the matching `JwtConfiguration` value is blank makes the application fail at startup with an
   `InvalidOperationException`. With both off, only the signature is checked, as before.
 
+### Changed
+
+- The package's project URL is the documentation site's new address, `https://docs.artur-rios.tech/dotnet-webapi-util`, since the
+  site moved from GitHub Pages.
+
 ### Fixed
 
 - `WebApiSwaggerOptions.JwtAuthentication` now makes the generated document require the `Bearer` scheme. The
