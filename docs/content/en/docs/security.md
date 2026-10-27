@@ -142,7 +142,7 @@ services.AddSingleton(new JwtConfiguration(3600, "my-api", "my-app", string.Empt
 ```
 
 Nothing else changes: `AuthenticationOptions` is untouched, and a configuration with no `Keys` behaves
-exactly as it did before. See the [ArturRios.Jwt docs](https://artur-rios.github.io/dotnet-jwt/) for
+exactly as it did before. See the [ArturRios.Jwt docs](https://docs.artur-rios.tech/dotnet-jwt/) for
 the rotation procedure and for how the `kid` header selects a key.
 
 ## Google authentication

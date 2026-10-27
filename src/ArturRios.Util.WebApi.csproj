@@ -14,7 +14,7 @@
     <PackageTags>utilities;web;api;.net</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl>https://github.com/artur-rios/dotnet-webapi-util</RepositoryUrl>
-    <PackageProjectUrl>https://artur-rios.github.io/dotnet-webapi-util</PackageProjectUrl>
+    <PackageProjectUrl>https://docs.artur-rios.tech/dotnet-webapi-util</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
