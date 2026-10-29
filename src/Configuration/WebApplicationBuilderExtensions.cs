@@ -109,12 +109,14 @@ public static class WebApplicationBuilderExtensions
                 "After getting a token from the Authentication route, put **_ONLY_** your JWT Bearer token on textbox below"
         };
 
-        var jwtRequirement = new OpenApiSecurityRequirement
-        {
-            { new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme), [] }
-        };
-
         options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, jwtSecurityScheme);
-        options.AddSecurityRequirement(_ => jwtRequirement);
+
+        // The reference must be bound to the document being generated: one without a host document has no target,
+        // and Microsoft.OpenApi then writes the requirement as an empty object ({}), which tells Swagger UI the
+        // operations need no credentials, so the token entered under "Authorize" was never sent.
+        options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+        {
+            { new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document), [] }
+        });
     }
 }

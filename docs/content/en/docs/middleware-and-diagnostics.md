@@ -69,6 +69,10 @@ Don't list the built-in middlewares there as well — they would run twice.
   `Exception` output type) is logged at **Information** level and answered with the exception's own
   `StatusCode` — the toggle's `disabledStatusCode` — rather than 500, with its messages in the envelope's
   `Errors`.
+- **`BadHttpRequestException`** — a client fault detected by Kestrel or a binder, such as a request body over
+  `MaxRequestBodySize` (413) or a malformed body (400) — is logged at **Information** level and answered with the
+  exception's own `StatusCode`, with that status's reason phrase (e.g. `"Payload Too Large"`) in `Errors`. This
+  is the status Kestrel itself would have answered with, so a bad request is never reported as a server error.
 - **Everything else** falls through to a single structured `logger.LogError(exception, "Unhandled
   exception while processing the request.")` call, followed by an HTTP 500 response — unless the request
   was aborted, in which case it logs at Debug and returns without writing anything.

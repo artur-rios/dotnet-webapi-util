@@ -5,7 +5,7 @@ linkTitle: Home
 
 {{< blocks/cover title="Dotnet WebApi Util" height="auto" color="primary" >}}
 <p class="lead mt-4">
-A typical request set up with the built-in middlewares flows through tracing, exception handling and authentication before it reaches your endpoint:
+Building blocks for ASP.NET Core web APIs in .NET: host bootstrapping, token authentication with role-based authorization, exception and tracing middleware, typed HTTP clients, and ActionResult mapping for ArturRios.Output envelopes.
 </p>
 <a class="btn btn-lg btn-secondary me-3 mb-4" href="docs/">
   Documentation <i class="fas fa-arrow-alt-circle-right ms-2"></i>
@@ -16,5 +16,5 @@ A typical request set up with the built-in middlewares flows through tracing, ex
 {{< /blocks/cover >}}
 
 {{% blocks/lead color="light" %}}
-A typical request set up with the built-in middlewares flows through tracing, exception handling and authentication before it reaches your endpoint:
+Building blocks for ASP.NET Core web APIs in .NET: host bootstrapping, token authentication with role-based authorization, exception and tracing middleware, typed HTTP clients, and ActionResult mapping for ArturRios.Output envelopes.
 {{% /blocks/lead %}}

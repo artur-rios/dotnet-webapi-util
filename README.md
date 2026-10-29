@@ -1,14 +1,22 @@
 # ArturRios.Util.WebApi
 
-[![Docs](https://img.shields.io/badge/docs-website-blue)](https://artur-rios.github.io/dotnet-webapi-util)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+> [!NOTE]
+> This is the real, open-source code of dotnet-webapi-util. Its home is Forgejo, at
+> https://git.techcraftsmen.net/artur-rios/dotnet-webapi-util; the copy on GitHub is a read-only mirror, for viewing only, and
+> its issues and pull requests are not followed. If you want to contribute, email me at
+> arturdev@duck.com.
+
+[![Docs](https://img.shields.io/badge/docs-website-blue)](https://docs.artur-rios.tech/dotnet-webapi-util)
+[![License: Attribution](https://img.shields.io/badge/License-Attribution-blue.svg)](https://github.com/artur-rios/dotnet-webapi-util/blob/main/LICENSE)
 [![NuGet](https://img.shields.io/nuget/v/ArturRios.Util.WebApi.svg)](https://www.nuget.org/packages/ArturRios.Util.WebApi)
+
+This repository lives at <https://git.techcraftsmen.net/artur-rios/dotnet-webapi-util>. The GitHub repository is a read-only mirror of it.
 
 Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
 (configuration, Swagger, middleware pipeline), token authentication (app JWT and/or Google ID tokens, read
 from the header, a cookie, or either) with stateless-or-revalidating user resolution and role-based
 authorization, cross-cutting middleware for exceptions and distributed tracing, a thin typed-`HttpClient`
-base for calling other services, and a resolver that turns `ArturRios.Output` envelopes into
+base for calling other services, and `ToActionResult` extensions that turn `ArturRios.Output` envelopes into
 `ActionResult`s.
 
 ## Installation
@@ -22,14 +30,14 @@ Requires **.NET 10**.
 
 | Area | What it does | Docs |
 |---|---|---|
-| Configuration / bootstrap | `WebApiStartup` runs one standard sequence — configuration loading, Swagger, the middleware pipeline — leaving you a single `ConfigureServices` method, and every step is also a standalone extension; `WebApiParameters` parses command-line startup args. | [Configuration](https://artur-rios.github.io/dotnet-webapi-util/docs/configuration/) |
-| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/) |
-| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate the W3C `traceparent`/`tracestate` across a request and its outgoing calls. | [Middleware & diagnostics](https://artur-rios.github.io/dotnet-webapi-util/docs/middleware-and-diagnostics/) |
-| HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://artur-rios.github.io/dotnet-webapi-util/docs/http-client/) |
-| Responses | `output.ToActionResult(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://artur-rios.github.io/dotnet-webapi-util/docs/responses/) |
-| Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint toggling](https://artur-rios.github.io/dotnet-webapi-util/docs/endpoint-toggle/) |
+| Configuration / bootstrap | `WebApiStartup` runs one standard sequence — configuration loading, Swagger, the middleware pipeline — leaving you a single `ConfigureServices` method, and every step is also a standalone extension; `WebApiParameters` parses command-line startup args. | [Configuration](https://docs.artur-rios.tech/dotnet-webapi-util/docs/configuration/) |
+| Security (JWT + Google + roles) | `AuthenticationMiddleware` reads a token from the header, a cookie, or either, validates it as the app's own JWT and/or a Google ID token, and attaches an `IAuthenticatedUser`, in stateless (`ClaimsOnly`) or per-request-revalidated mode; `[Authorize]`, `[AllowAnonymous]` and `[RoleRequirement(...)]` declare access rules. | [Security](https://docs.artur-rios.tech/dotnet-webapi-util/docs/security/) |
+| Middleware & diagnostics | `ExceptionMiddleware` converts unhandled exceptions into a JSON error envelope; `TraceActivityMiddleware` and `TracePropagationHandler` propagate the W3C `traceparent`/`tracestate` across a request and its outgoing calls. | [Middleware & diagnostics](https://docs.artur-rios.tech/dotnet-webapi-util/docs/middleware-and-diagnostics/) |
+| HTTP client | `BaseWebApiClient` / `BaseWebApiClientRoute` give a typed client a shared `HttpGateway`, route grouping, and helpers to authenticate and carry the resulting bearer token on subsequent calls. | [HTTP client](https://docs.artur-rios.tech/dotnet-webapi-util/docs/http-client/) |
+| Responses | `output.ToActionResult(...)` wraps `DataOutput<T>`, `PaginatedOutput<T>` and `ProcessOutput` in an `ActionResult`, defaulting to 200/400 based on `Success` unless a status code is supplied. | [Responses](https://docs.artur-rios.tech/dotnet-webapi-util/docs/responses/) |
+| Endpoint toggling | `[EndpointToggle]` enables or disables a single endpoint from a compile-time flag or a runtime `appsettings.json`/environment-variable value, shaping the disabled response as an empty status code, the action's default value, a `ProcessOutput` envelope, or a thrown `EndpointDisabledException`. | [Endpoint toggling](https://docs.artur-rios.tech/dotnet-webapi-util/docs/endpoint-toggle/) |
 
-See also **[Architecture](https://artur-rios.github.io/dotnet-webapi-util/docs/architecture/)** for how these pieces fit together.
+See also **[Architecture](https://docs.artur-rios.tech/dotnet-webapi-util/docs/architecture/)** for how these pieces fit together.
 
 ## Quick start
 
@@ -114,11 +122,16 @@ builder.Services.AddTokenAuthentication(options =>
     options.EnableGoogle = true;          // default: false
     options.GoogleClientIds = ["your-google-oauth-client-id"];
     options.JwtMode = JwtValidationMode.ClaimsOnly; // or Revalidate
+    options.ValidateIssuer = true;        // default: false
+    options.ValidateAudience = true;      // default: false
 });
 ```
 
 At least one of `EnableJwt`/`EnableGoogle` must be enabled, and `EnableGoogle` requires at least one
-entry in `GoogleClientIds` — `AddTokenAuthentication` throws otherwise. A request may carry either kind of
+entry in `GoogleClientIds` — `AddTokenAuthentication` throws otherwise. By default only the app JWT's
+signature is checked; `ValidateIssuer`/`ValidateAudience` also require its `iss`/`aud` to match
+`JwtConfiguration.Issuer`/`Audience` — turn them on whenever the signing key is shared with another issuer or
+audience. Turning one on while the matching `JwtConfiguration` value is blank fails the application's startup. A request may carry either kind of
 token: validators run in registration order (app JWT first, then Google), and the first one that resolves
 a user wins.
 
@@ -133,12 +146,12 @@ For the app JWT, how the user is resolved is controlled by `AuthenticationOption
   rejected immediately, at the cost of one lookup per request.
 - **Your own identity** — implement `IAuthenticatedUser` (`Guid Id`, `int RoleId`) on your own type and an
   `IAuthenticatedUserMapper` to decide what your tokens carry; read it back with
-  `HttpContext.GetUser<MyUser>()`. See [Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/).
+  `HttpContext.GetUser<MyUser>()`. See [Security](https://docs.artur-rios.tech/dotnet-webapi-util/docs/security/).
 
 Signing keys can be rotated: give `JwtConfiguration` a set of `Keys` and name the one that signs with
 `SigningKeyId`, and a token signed with a key that has since been retired stays valid until that key is
 withdrawn. A configuration with no `Keys` validates against `Secret` exactly as before. See
-[Security](https://artur-rios.github.io/dotnet-webapi-util/docs/security/).
+[Security](https://docs.artur-rios.tech/dotnet-webapi-util/docs/security/).
 
 A Google ID token is always resolved by looking up the token's verified email through
 `IAuthenticationProvider.GetAuthenticatedUserByEmail`, so an `IAuthenticationProvider` is **required**
@@ -146,7 +159,8 @@ whenever `EnableGoogle` is `true`, as it is for JWT `Revalidate` mode. To accept
 
 1. Add the `Google.Apis.Auth` package (already a dependency of this library, so it resolves
    transitively — add it explicitly only if you call its APIs directly).
-2. Set `EnableGoogle = true` and `GoogleClientIds` to your app's OAuth client ID(s) on the web api options.
+2. Set `EnableGoogle = true` and `GoogleClientIds` to your app's OAuth client ID(s) in the `AddTokenAuthentication`
+   callback (`AuthenticationOptions`).
 3. Implement `IAuthenticationProvider.GetAuthenticatedUserByEmail(string)` (and register the provider,
    optionally via `AddCachedAuthenticationProvider<T>`, below).
 
@@ -221,7 +235,8 @@ builder.Services.AddHttpClient<MyApiClient>()
     .AddTracePropagation();
 ```
 
-It also logs the client's IP address with each request and tags it on the activity as `client.address`.
+`TraceActivityMiddleware` also logs the client's IP address with each request and tags it on the activity as
+`client.address`.
 Both are on by default and can be turned off, for example where IP addresses count as personal data:
 
 ```csharp
@@ -316,61 +331,23 @@ code (`Void`), the action's default return value (`Default`), a `ProcessOutput` 
 
 ## Documentation
 
-Full documentation, including architecture diagrams: **<https://artur-rios.github.io/dotnet-webapi-util>**
+Full documentation, including architecture diagrams: **<https://docs.artur-rios.tech/dotnet-webapi-util>**
 
-## Testing
+## Upgrading
 
-The test suite is xUnit, and every test is named with the Given / When / Then pattern. Every test class
-carries a `Category` trait, so the two kinds can be run — and reported — separately:
+- From 2.x to 3.0: [Upgrading from 2.x to 3.0](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CHANGELOG.md#upgrading-from-2x-to-30)
 
-```bash
-dotnet test src/ArturRios.Util.WebApi.sln --filter "Category=Unit"
-dotnet test src/ArturRios.Util.WebApi.sln --filter "Category=Functional"
-```
+## Changelog
 
-Unit tests exercise the code in isolation against test doubles.
-Functional tests run the trace, exception and authentication middlewares together in a real ASP.NET Core host and drive real HTTP requests through it.
-CI runs the two as separate jobs, and both must pass before a pull request can be merged.
+Notable changes in each release are recorded in [CHANGELOG.md](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CHANGELOG.md). Releases follow
+[Semantic Versioning](https://semver.org/).
 
-## Branching and releases
+## Contributing
 
-`develop` is the integration branch and the base for all new work; `main` only holds released code.
-
-1. Branch off `develop` — `feature/<name>` for features, `fix/<name>` for fixes (`chore/`, `refactor/`, `docs/`,
-   `ci/`, `test/`, `perf/` and `build/` are accepted too) — and open a pull request back into `develop`.
-2. To release, cut `release/<version>` from `develop`, set `<Version>` in `src/ArturRios.Util.WebApi.csproj` to that version
-   and open a pull request into `main`. Only `release/*` branches can be merged into `main`.
-3. Once it is merged, tag the merge commit on `main` with the version. Pushing the tag publishes the package to
-   nuget.org and GitHub Packages:
-
-   ```bash
-   git switch main && git pull
-   git tag <version> && git push origin <version>
-   ```
-
-4. Open a pull request from `main` into `develop` to bring the release back into the integration branch.
-
-Pull requests into `develop` and `main` must pass the tests and the branch policy check. Only the repository owner can
-push version tags, and the publish workflow rejects tags that do not point at a commit on `main`.
-
-## Versioning
-
-Semantic Versioning (SemVer). Breaking changes result in a new major version. New methods or non-breaking behavior
-changes increment the minor version; fixes or tweaks increment the patch.
-
-Version 2.0 renamed the `ArturRios.Util.WebApi.Api.Configuration` and `ArturRios.Util.WebApi.Api.Client`
-namespaces to `ArturRios.Util.WebApi.Configuration` and `ArturRios.Util.WebApi.Client`.
-
-## Build, test and publish
-
-Use the official [.NET CLI](https://learn.microsoft.com/en-us/dotnet/core/tools/) to build, test and publish the project
-and Git for source control.
-If you want, optional helper toolsets I built to facilitate these tasks are available:
-
-- [Dotnet Tools](https://github.com/artur-rios/dotnet-tools)
-- [Python Dotnet Tools](https://github.com/artur-rios/python-dotnet-tools)
+Building from source, running the tests, the branching model and the release process are described in
+[CONTRIBUTING.md](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CONTRIBUTING.md).
 
 ## Legal Details
 
-This project is licensed under the [MIT License](https://en.wikipedia.org/wiki/MIT_License). A copy of the license is
-available at [LICENSE](./LICENSE) in the repository.
+This project is licensed under the [Artur Rios Attribution License](https://github.com/artur-rios/dotnet-webapi-util/blob/main/LICENSE).
+It is free and open source: you may view, use, fork, modify, and extend it, provided you credit the author, Artur Rios, with a link to [artur-rios.tech](https://artur-rios.tech) or [github.com/artur-rios](https://github.com/artur-rios).

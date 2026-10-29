@@ -20,7 +20,7 @@ flowchart TB
     subgraph Services["Services — on the WebApplicationBuilder"]
         Load["builder.LoadConfiguration(Parameters)"] --> Controllers["Services.AddControllers()"]
         Controllers --> Envelope["Services.AddInvalidModelStateEnvelope()<br/><i>if Options.UseInvalidModelStateEnvelope</i>"]
-        Envelope --> SwaggerGen["builder.AddWebApiSwagger(Parameters, Options.Swagger)<br/><i>only where Swagger is allowed</i>"]
+        Envelope --> SwaggerGen["builder.AddWebApiSwagger(Parameters)<br/><i>tuned by Options.Swagger, only where Swagger is allowed</i>"]
         SwaggerGen --> Configure["ConfigureServices(builder)<br/><i>abstract — your services</i>"]
     end
     subgraph Pipeline["Pipeline — on the built WebApplication"]
@@ -40,7 +40,7 @@ flowchart TB
 | 1 | `Builder.LoadConfiguration(Parameters)` | Loads `appsettings` and/or the `.env` file per `WebApiParameters`; registers `WebApiParameters`, `ConfigurationLoader` and `SettingsProvider` (always — `AuthenticationMiddleware` needs it), plus `EnvironmentProvider` when the env file is loaded. | `UseAppSettings:` / `UseEnvFile:` args |
 | 2 | `Builder.Services.AddControllers()` | Registers MVC controllers. | — |
 | 3 | `Builder.Services.AddInvalidModelStateEnvelope()` | Answers invalid model state with a `DataOutput<string>`-shaped 400 (see [Invalid model state](#invalid-model-state)). | `Options.UseInvalidModelStateEnvelope` |
-| 4 | `Builder.AddWebApiSwagger(Parameters, Options.Swagger)` | Registers the Swagger generator, only in environments where Swagger is allowed, and sets the `Swagger:Enabled` marker. | `Options.Swagger`, `EnableSwaggerDocs:` / `SwaggerEnvironments:` args |
+| 4 | `Builder.AddWebApiSwagger(Parameters, …)` | Registers the Swagger generator, only in environments where Swagger is allowed, and sets the `Swagger:Enabled` marker. | `Options.Swagger`, `EnableSwaggerDocs:` / `SwaggerEnvironments:` args |
 | 5 | `ConfigureServices(builder)` | **Your** services: data access, handlers, `AddTokenAuthentication`, `AddCors`, hosted services, logging, and so on. | your override |
 | 6 | `Builder.Build()` | Builds the `WebApplication`. | — |
 | 7 | `app.UseStandardMiddlewares(Options.CorsPolicy)` | `UseForwardedHeaders` (a no-op until `ForwardedHeadersOptions` is configured), `TraceActivityMiddleware`, `ExceptionMiddleware`, Swagger (only if step 4 registered the generator), `UseCors` (only if a policy is named), then `AuthenticationMiddleware` (only if `AddTokenAuthentication` was called). Swagger and CORS run before authentication, so the Swagger UI and CORS preflight requests never need a token. | `Options.CorsPolicy`, whether `AddTokenAuthentication` was registered |
@@ -81,6 +81,12 @@ var app = new Startup(args).Build();
 app.MapHealthChecks("/health");
 app.Run();
 ```
+
+`AddTokenAuthentication` validates its options as soon as it's called. The one check it can't make there —
+`ValidateIssuer`/`ValidateAudience` on while `JwtConfiguration.Issuer`/`Audience` is blank, since
+`JwtConfiguration` is registered separately — runs when the pipeline is built, so `Run()`/`RunAsync()` (or
+`app.StartAsync()`) throws an `InvalidOperationException` before the app serves anything. See
+[Security](../security/#issuer-and-audience).
 
 `Build()` returns the `WebApplication`, so endpoints beyond the controllers — health checks, minimal APIs —
 are mapped on it before it runs. When there's nothing extra to map, `new Startup(args).Run()` (or
