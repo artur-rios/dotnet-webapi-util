@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-10-29
+
 ### Added
 
 - `AuthenticationOptions.ValidateIssuer` and `ValidateAudience` (both default `false`). When on,
@@ -240,7 +242,8 @@ just a compile fix.
 - XML documentation across the public API. The configuration and client types live in the
   `ArturRios.Util.WebApi.Configuration` and `ArturRios.Util.WebApi.Client` namespaces.
 
-[Unreleased]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.1.0...HEAD
+[Unreleased]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.2.0...HEAD
+[5.2.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.1.0...5.2.0
 [5.1.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.0.0...5.1.0
 [5.0.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/4.0.0...5.0.0
 [4.0.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/v3.3.0...4.0.0
