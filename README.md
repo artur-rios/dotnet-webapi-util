@@ -1,16 +1,8 @@
 # ArturRios.Util.WebApi
 
-> [!NOTE]
-> This is the real, open-source code of dotnet-webapi-util. Its home is Forgejo, at
-> https://git.techcraftsmen.net/artur-rios/dotnet-webapi-util; the copy on GitHub is a read-only mirror, for viewing only, and
-> its issues and pull requests are not followed. If you want to contribute, email me at
-> arturdev@duck.com.
-
 [![Docs](https://img.shields.io/badge/docs-website-blue)](https://docs.artur-rios.tech/dotnet-webapi-util)
 [![License: Attribution](https://img.shields.io/badge/License-Attribution-blue.svg)](https://github.com/artur-rios/dotnet-webapi-util/blob/main/LICENSE)
 [![NuGet](https://img.shields.io/nuget/v/ArturRios.Util.WebApi.svg)](https://www.nuget.org/packages/ArturRios.Util.WebApi)
-
-This repository lives at <https://git.techcraftsmen.net/artur-rios/dotnet-webapi-util>. The GitHub repository is a read-only mirror of it.
 
 Utilities for building ASP.NET Core web APIs in .NET: a base class for bootstrapping the host
 (configuration, Swagger, middleware pipeline), token authentication (app JWT and/or Google ID tokens, read
@@ -346,6 +338,9 @@ Notable changes in each release are recorded in [CHANGELOG.md](https://github.co
 
 Building from source, running the tests, the branching model and the release process are described in
 [CONTRIBUTING.md](https://github.com/artur-rios/dotnet-webapi-util/blob/main/CONTRIBUTING.md).
+
+The GitHub repository is a read-only mirror for the real, open-source code of dotnet-webapi-util. Its home is Forgejo, at
+https://git.techcraftsmen.net/artur-rios/dotnet-webapi-util. If you want to contribute, e-mail me at arturdev@duck.com.
 
 ## Legal Details
 
