@@ -25,8 +25,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ArturRios.Configuration" Version="1.2.0" />
-    <PackageReference Include="ArturRios.Jwt" Version="1.2.0" />
-    <PackageReference Include="ArturRios.Util" Version="2.1.0" />
+    <PackageReference Include="ArturRios.Jwt" Version="1.4.1" />
+    <PackageReference Include="ArturRios.Util" Version="2.2.0" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="Google.Apis.Auth" Version="1.76.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
