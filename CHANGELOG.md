@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Swashbuckle.AspNetCore` updated from 10.2.3 to 11.0.1 and `Microsoft.OpenApi` from 2.13.0 to 3.11.0.
+  `WebApiSwaggerOptions.ConfigureGenerator` hands the callback Swashbuckle 11's `SwaggerGenOptions`, so a callback (or
+  any other code of the application) written against the Microsoft.OpenApi 2 object model may need changes; see
+  Swashbuckle's v11 migration guide. The generated document is still OpenAPI 3.0.
+- **Behavior change:** `ArturRios.Configuration` updated from 1.2.0 to 2.0.0. The `.env` file `LoadConfiguration`
+  loads no longer overrides environment variables the process already has: real environment variables now win over
+  the file, and a key repeated within the file keeps its first value.
+- `FluentValidation` updated from 12.1.1 to 12.2.0 and `Google.Apis.Auth` from 1.76.0 to 1.78.0.
+
 ## [5.2.0] - 2026-10-29
 
 ### Added
