@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Breaking:** `Swashbuckle.AspNetCore` updated from 10.2.3 to 11.0.1 and `Microsoft.OpenApi` from 2.13.0 to 3.11.0.
+- **Breaking:** `Swashbuckle.AspNetCore` updated from 10.2.3 to 11.0.1 and `Microsoft.OpenApi` from 2.7.5 to 3.11.0.
   `WebApiSwaggerOptions.ConfigureGenerator` hands the callback Swashbuckle 11's `SwaggerGenOptions`, so a callback (or
   any other code of the application) written against the Microsoft.OpenApi 2 object model may need changes; see
   Swashbuckle's v11 migration guide. The generated document is still OpenAPI 3.0.
