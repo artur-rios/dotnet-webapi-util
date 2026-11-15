@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   loads no longer overrides environment variables the process already has: real environment variables now win over
   the file, and a key repeated within the file keeps its first value.
 - `FluentValidation` updated from 12.1.1 to 12.2.0 and `Google.Apis.Auth` from 1.76.0 to 1.78.0.
+- `ArturRios.Jwt` updated from 1.2.0 to 1.4.1 and `ArturRios.Util` from 2.1.0 to 2.2.0.
+- `Microsoft.AspNetCore.Authentication.JwtBearer` updated from 10.0.11 to 10.0.15.
 
 ## [5.2.0] - 2026-10-29
 
