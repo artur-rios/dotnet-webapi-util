@@ -65,4 +65,52 @@ public class TracePropagationHandlerTests
 
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(TracePropagationHandler));
     }
+
+    [Fact]
+    public async Task GivenNoAmbientActivity_WhenSending_ThenNoTraceHeadersAreAdded()
+    {
+        Activity.Current = null;
+
+        var request = await Send(new HttpRequestMessage(HttpMethod.Get, "https://example.test"));
+
+        Assert.False(request.Headers.Contains("traceparent"));
+        Assert.False(request.Headers.Contains("tracestate"));
+    }
+
+    [Fact]
+    public async Task GivenAnAmbientActivityWithNoTracestate_WhenSending_ThenOnlyTheTraceparentIsAdded()
+    {
+        using var activity = new Activity("test").SetIdFormat(ActivityIdFormat.W3C).Start();
+
+        var request = await Send(new HttpRequestMessage(HttpMethod.Get, "https://example.test"));
+
+        Assert.Equal(activity.ToTraceParent(), request.Headers.GetValues("traceparent").Single());
+        Assert.False(request.Headers.Contains("tracestate"));
+    }
+
+    [Fact]
+    public void GivenTwoClientsWithTracePropagation_WhenRegistered_ThenTheHandlerIsRegisteredOnce()
+    {
+        var services = new ServiceCollection();
+
+        services.AddHttpClient("first").AddTracePropagation();
+        services.AddHttpClient("second").AddTracePropagation();
+
+        Assert.Single(services, descriptor => descriptor.ServiceType == typeof(TracePropagationHandler));
+    }
+
+    [Fact]
+    public async Task GivenAClientWithTracePropagation_WhenItSendsUnderAnActivity_ThenTheRequestCarriesTheTraceparent()
+    {
+        var inner = new CapturingHandler();
+        var services = new ServiceCollection();
+        services.AddHttpClient("downstream").AddTracePropagation().ConfigurePrimaryHttpMessageHandler(() => inner);
+        await using var provider = services.BuildServiceProvider();
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("downstream");
+        using var activity = new Activity("test").SetIdFormat(ActivityIdFormat.W3C).Start();
+
+        await client.GetAsync("https://example.test", TestContext.Current.CancellationToken);
+
+        Assert.Equal(activity.ToTraceParent(), inner.Request?.Headers.GetValues("traceparent").Single());
+    }
 }

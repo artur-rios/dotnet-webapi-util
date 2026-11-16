@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using ArturRios.Util.WebApi.Extensions;
 using ArturRios.Util.WebApi.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -149,5 +150,147 @@ public class TraceActivityMiddlewareTests
             Entries.Add(new LogEntry(logLevel, formatter(state, exception),
                 values.ToDictionary(pair => pair.Key, pair => pair.Value)));
         }
+    }
+
+    [Fact]
+    public async Task GivenAnAmbientActivity_WhenItPassesThroughTheMiddleware_ThenThatActivityIsUsedAndLeftRunning()
+    {
+        using var ambient = new Activity("ambient").SetIdFormat(ActivityIdFormat.W3C).Start();
+        Activity? seen = null;
+        var context = new DefaultHttpContext();
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            seen = Activity.Current;
+
+            return Task.CompletedTask;
+        }, NullLogger<TraceActivityMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Same(ambient, seen);
+        Assert.Equal(ambient.TraceId.ToString(), context.TraceIdentifier);
+        Assert.Equal(ambient.ToTraceParent(), context.Response.Headers["traceparent"].ToString());
+        Assert.False(ambient.IsStopped);
+    }
+
+    [Fact]
+    public async Task GivenNoAmbientActivity_WhenTheRequestEnds_ThenTheActivityTheMiddlewareStartedIsStopped()
+    {
+        Activity? started = null;
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            started = Activity.Current;
+
+            return Task.CompletedTask;
+        }, NullLogger<TraceActivityMiddleware>.Instance);
+
+        Activity.Current = null;
+
+        await middleware.InvokeAsync(new DefaultHttpContext());
+
+        Assert.NotNull(started);
+        Assert.Equal("ServerReceive", started.OperationName);
+        Assert.Equal(ActivityIdFormat.W3C, started.IdFormat);
+        Assert.True(started.IsStopped);
+    }
+
+    [Fact]
+    public async Task GivenTheNextMiddlewareThrows_WhenTheRequestEnds_ThenTheActivityIsStoppedAndTheExceptionPropagates()
+    {
+        Activity? started = null;
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            started = Activity.Current;
+
+            throw new InvalidOperationException("boom");
+        }, NullLogger<TraceActivityMiddleware>.Instance);
+
+        Activity.Current = null;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(new DefaultHttpContext()));
+
+        Assert.True(started?.IsStopped);
+    }
+
+    [Fact]
+    public async Task GivenAnIncomingTracestate_WhenTheMiddlewareStartsTheActivity_ThenItCarriesTheCallersTracestate()
+    {
+        string? traceState = null;
+        var context = new DefaultHttpContext();
+        context.Request.Headers["traceparent"] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+        context.Request.Headers["tracestate"] = "vendor=value";
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            traceState = Activity.Current?.TraceStateString;
+
+            return Task.CompletedTask;
+        }, NullLogger<TraceActivityMiddleware>.Instance);
+
+        Activity.Current = null;
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("vendor=value", traceState);
+    }
+
+    [Theory]
+    [InlineData("garbage")]
+    [InlineData("00-not-a-trace-id-01")]
+    public async Task GivenAMalformedTraceparent_WhenItPassesThroughTheMiddleware_ThenANewTraceIsStarted(string traceparent)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers["traceparent"] = traceparent;
+        var middleware = new TraceActivityMiddleware(_ => Task.CompletedTask, NullLogger<TraceActivityMiddleware>.Instance);
+
+        Activity.Current = null;
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Matches("^[0-9a-f]{32}$", context.TraceIdentifier);
+        Assert.StartsWith($"00-{context.TraceIdentifier}-", context.Response.Headers["traceparent"].ToString());
+    }
+
+    [Fact]
+    public async Task GivenANullContext_WhenInvoked_ThenItThrows()
+    {
+        var middleware = new TraceActivityMiddleware(_ => Task.CompletedTask, NullLogger<TraceActivityMiddleware>.Instance);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => middleware.InvokeAsync(null!));
+    }
+
+    [Fact]
+    public async Task GivenBothClientAddressOptionsAreOff_WhenTheRequestStarts_ThenTheAddressIsNeitherLoggedNorTagged()
+    {
+        var logger = new CapturingLogger();
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+        var tagged = "not-run";
+        var middleware = new TraceActivityMiddleware(_ =>
+        {
+            tagged = Activity.Current?.GetTagItem("client.address") as string;
+
+            return Task.CompletedTask;
+        }, logger, Options.Create(new TraceActivityOptions { LogClientIp = false, TagClientAddress = false }));
+
+        Activity.Current = null;
+
+        await middleware.InvokeAsync(context);
+
+        var entry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Information);
+        Assert.DoesNotContain("203.0.113.7", entry.Message);
+        Assert.Null(tagged);
+    }
+
+    [Fact]
+    public async Task GivenARequest_WhenItEnds_ThenTheEndIsLoggedAtTraceLevelWithItsTraceId()
+    {
+        var logger = new CapturingLogger();
+        var context = new DefaultHttpContext();
+        var middleware = new TraceActivityMiddleware(_ => Task.CompletedTask, logger);
+
+        await middleware.InvokeAsync(context);
+
+        var entry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Trace);
+        Assert.Equal(context.TraceIdentifier, entry.State["TraceId"]);
     }
 }

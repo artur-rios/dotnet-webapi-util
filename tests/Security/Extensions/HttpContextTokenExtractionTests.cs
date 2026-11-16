@@ -2,7 +2,7 @@ using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Http;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Extensions;
 
 [Trait("Category", "Unit")]
 public class HttpContextTokenExtractionTests
@@ -92,5 +92,41 @@ public class HttpContextTokenExtractionTests
     {
         var context = ContextWith(header: null);
         Assert.Equal(string.Empty, context.ExtractToken(TokenSource.Either, "access_token"));
+    }
+
+    [Theory]
+    [InlineData("Bearer")]
+    [InlineData("Bearer    ")]
+    [InlineData("   ")]
+    [InlineData("Bearer\t")]
+    public void GivenABearerHeaderWithNoToken_WhenExtractingFromTheHeader_ThenNothingComesBack(string header)
+    {
+        var context = ContextWith(header);
+
+        Assert.Equal(string.Empty, context.ExtractToken(TokenSource.Header, "access_token"));
+    }
+
+    [Fact]
+    public void GivenAnUndefinedTokenSource_WhenExtracting_ThenNothingComesBack()
+    {
+        var context = ContextWith("Bearer abc.def.ghi", "access_token", "cookie-token");
+
+        Assert.Equal(string.Empty, context.ExtractToken((TokenSource)42, "access_token"));
+    }
+
+    [Fact]
+    public void GivenACookieWithAnotherName_WhenExtractingFromTheCookie_ThenNothingComesBack()
+    {
+        var context = ContextWith(header: null, "session", "cookie-token");
+
+        Assert.Equal(string.Empty, context.ExtractToken(TokenSource.Cookie, "access_token"));
+    }
+
+    [Fact]
+    public void GivenANullContext_WhenExtracting_ThenItThrows()
+    {
+        HttpContext context = null!;
+
+        Assert.Throws<ArgumentNullException>(() => context.ExtractToken(TokenSource.Header, "access_token"));
     }
 }

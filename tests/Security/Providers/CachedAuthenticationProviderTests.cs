@@ -3,7 +3,7 @@ using ArturRios.Util.WebApi.Security.Providers;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Providers;
 
 [Trait("Category", "Unit")]
 public class CachedAuthenticationProviderTests

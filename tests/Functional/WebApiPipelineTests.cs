@@ -24,17 +24,17 @@ namespace ArturRios.Util.WebApi.Tests.Functional;
 /// <summary>
 /// Runs the trace, exception and authentication middlewares together in a real ASP.NET Core host and
 /// drives real HTTP requests through it, so the ordering, the response envelopes and the headers are
-/// exercised the way an application would meet them.
+/// exercised the way an application would meet them. Every test sends its own requests to the same, stateless
+/// host, so the class builds it once (<see cref="Host"/>) rather than once per test.
 /// </summary>
 [Trait("Category", "Functional")]
-public sealed class WebApiPipelineTests : IAsyncLifetime
+public sealed class WebApiPipelineTests(WebApiPipelineTests.Host host) : IClassFixture<WebApiPipelineTests.Host>
 {
     private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
 
     private static readonly Guid UserId = Guid.Parse("3f2a9c1e-7b64-4d0a-9f11-8c5d2e6a4b90");
 
-    private IHost _host = null!;
-    private HttpClient _client = null!;
+    private readonly HttpClient _client = host.Client;
 
     private sealed record User(Guid Id, int RoleId) : IAuthenticatedUser;
 
@@ -45,63 +45,69 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
         public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
     }
 
-    public async Task InitializeAsync()
+    /// <summary>The host the tests share: the trace, exception and authentication middlewares on three branches.</summary>
+    public sealed class Host : IAsyncLifetime
     {
-        var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly, Source = TokenSource.Header };
-        var jwtConfiguration = new JwtConfiguration(3600, "issuer", "audience", Secret, new Dictionary<string, string>());
+        private IHost _host = null!;
 
-        _host = await new HostBuilder()
-            .ConfigureWebHost(builder => builder
-                .UseTestServer()
-                .ConfigureServices(services =>
-                {
-                    services.AddLogging();
-                    services.AddSingleton(new SettingsProvider(new ConfigurationBuilder().Build()));
-                    services.AddSingleton(options);
-                    services.AddSingleton(jwtConfiguration);
-                    services.AddSingleton<JwtHandler>();
-                    services.AddSingleton<IAuthenticatedUserMapper, DefaultAuthenticatedUserMapper>();
-                    services.AddSingleton<IAuthenticationProvider, KnownUserProvider>();
-                    services.AddSingleton<ITokenValidator>(provider => new JwtTokenValidator(
-                        jwtConfiguration,
-                        provider.GetRequiredService<JwtHandler>(),
-                        provider.GetRequiredService<IAuthenticatedUserMapper>(),
-                        options));
-                })
-                .Configure(app =>
-                {
-                    app.UseMiddleware<TraceActivityMiddleware>();
-                    app.UseMiddleware<ExceptionMiddleware>();
+        public HttpClient Client { get; private set; } = null!;
 
-                    app.Map("/open", branch => branch.Run(context => context.Response.WriteAsync("open")));
+        public async ValueTask InitializeAsync()
+        {
+            var options = new AuthenticationOptions { JwtMode = JwtValidationMode.ClaimsOnly, Source = TokenSource.Header };
+            var jwtConfiguration = new JwtConfiguration(3600, "issuer", "audience", Secret, new Dictionary<string, string>());
 
-                    app.Map("/boom", branch => branch
-                        .UseMiddleware<ExceptionMiddleware>()
-                        .Run(_ => throw new InvalidOperationException("internal detail")));
+            _host = await new HostBuilder()
+                .ConfigureWebHost(builder => builder
+                    .UseTestServer()
+                    .ConfigureServices(services =>
+                    {
+                        services.AddLogging();
+                        services.AddSingleton(new SettingsProvider(new ConfigurationBuilder().Build()));
+                        services.AddSingleton(options);
+                        services.AddSingleton(jwtConfiguration);
+                        services.AddSingleton<JwtHandler>();
+                        services.AddSingleton<IAuthenticatedUserMapper, DefaultAuthenticatedUserMapper>();
+                        services.AddSingleton<IAuthenticationProvider, KnownUserProvider>();
+                        services.AddSingleton<ITokenValidator>(provider => new JwtTokenValidator(
+                            jwtConfiguration,
+                            provider.GetRequiredService<JwtHandler>(),
+                            provider.GetRequiredService<IAuthenticatedUserMapper>(),
+                            options));
+                    })
+                    .Configure(app =>
+                    {
+                        app.UseMiddleware<TraceActivityMiddleware>();
+                        app.UseMiddleware<ExceptionMiddleware>();
 
-                    app.Map("/secure", branch => branch
-                        .UseMiddleware<AuthenticationMiddleware>()
-                        .Run(async context =>
-                        {
-                            var user = context.GetUser();
+                        app.Map("/open", branch => branch.Run(context => context.Response.WriteAsync("open")));
 
-                            await context.Response.WriteAsync(user?.Id.ToString() ?? "none");
-                        }));
-                }))
-            .StartAsync();
+                        app.Map("/boom", branch => branch
+                            .UseMiddleware<ExceptionMiddleware>()
+                            .Run(_ => throw new InvalidOperationException("internal detail")));
 
-        _client = _host.GetTestClient();
+                        app.Map("/secure", branch => branch
+                            .UseMiddleware<AuthenticationMiddleware>()
+                            .Run(async context =>
+                            {
+                                var user = context.GetUser();
 
-        return;
-    }
+                                await context.Response.WriteAsync(user?.Id.ToString() ?? "none");
+                            }));
+                    }))
+                .StartAsync();
 
-    public async Task DisposeAsync()
-    {
-        _client.Dispose();
+            Client = _host.GetTestClient();
+        }
 
-        await _host.StopAsync();
+        public async ValueTask DisposeAsync()
+        {
+            Client.Dispose();
 
-        _host.Dispose();
+            await _host.StopAsync();
+
+            _host.Dispose();
+        }
     }
 
     private static string TokenFor(Guid id) =>
@@ -111,7 +117,7 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
     [Fact]
     public async Task GivenAnyRequest_WhenItPassesThroughTheHost_ThenTheResponseCarriesATraceparentHeader()
     {
-        var response = await _client.GetAsync("/open");
+        var response = await _client.GetAsync("/open", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Headers.Contains("traceparent"));
@@ -125,8 +131,8 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
     [Fact]
     public async Task GivenTwoRequests_WhenBothPassThroughTheHost_ThenEachCarriesItsOwnTraceId()
     {
-        var first = await _client.GetAsync("/open");
-        var second = await _client.GetAsync("/open");
+        var first = await _client.GetAsync("/open", TestContext.Current.CancellationToken);
+        var second = await _client.GetAsync("/open", TestContext.Current.CancellationToken);
 
         Assert.NotEqual(
             first.Headers.GetValues("traceparent").Single(),
@@ -136,12 +142,12 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
     [Fact]
     public async Task GivenAnEndpointThatThrows_WhenCalled_ThenA500ArrivesWithAFailedEnvelope()
     {
-        var response = await _client.GetAsync("/boom");
+        var response = await _client.GetAsync("/boom", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
 
-        var output = JsonSerializer.Deserialize<DataOutput<string>>(await response.Content.ReadAsStringAsync(), JsonSerializerOptions.Web)!;
+        var output = JsonSerializer.Deserialize<DataOutput<string>>(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), JsonSerializerOptions.Web)!;
 
         Assert.False(output.Success);
         Assert.Contains(output.Errors, error => error.Contains("Internal server error"));
@@ -151,11 +157,11 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
     [Fact]
     public async Task GivenNoToken_WhenCallingASecuredEndpoint_ThenUnauthorizedArrivesWithAFailedEnvelope()
     {
-        var response = await _client.GetAsync("/secure");
+        var response = await _client.GetAsync("/secure", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
 
-        var output = JsonSerializer.Deserialize<ProcessOutput>(await response.Content.ReadAsStringAsync(), JsonSerializerOptions.Web)!;
+        var output = JsonSerializer.Deserialize<ProcessOutput>(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), JsonSerializerOptions.Web)!;
 
         Assert.False(output.Success);
         Assert.NotEmpty(output.Errors);
@@ -168,10 +174,10 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
 
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TokenFor(UserId));
 
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(UserId.ToString(), await response.Content.ReadAsStringAsync());
+        Assert.Equal(UserId.ToString(), await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -185,7 +191,7 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
 
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", foreignToken);
 
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -197,7 +203,7 @@ public sealed class WebApiPipelineTests : IAsyncLifetime
 
         request.Headers.TryAddWithoutValidation("Authorization", "Bearer a.b.c");
 
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }

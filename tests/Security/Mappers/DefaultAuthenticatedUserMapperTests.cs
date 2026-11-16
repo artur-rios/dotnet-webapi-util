@@ -3,7 +3,7 @@ using ArturRios.Util.WebApi.Security.Interfaces;
 using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Records;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Mappers;
 
 [Trait("Category", "Unit")]
 public class DefaultAuthenticatedUserMapperTests

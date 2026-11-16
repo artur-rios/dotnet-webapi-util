@@ -2,7 +2,7 @@ using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.Http;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Extensions;
 
 [Trait("Category", "Unit")]
 public class HttpContextExtensionsTests
