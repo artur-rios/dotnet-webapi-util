@@ -24,9 +24,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="ArturRios.Configuration" Version="2.0.0" />
-    <PackageReference Include="ArturRios.Jwt" Version="1.4.1" />
-    <PackageReference Include="ArturRios.Util" Version="2.2.0" />
+    <PackageReference Include="ArturRios.Configuration" Version="2.0.1" />
+    <PackageReference Include="ArturRios.Jwt" Version="1.4.2" />
+    <PackageReference Include="ArturRios.Util" Version="2.2.1" />
     <PackageReference Include="FluentValidation" Version="12.2.0" />
     <PackageReference Include="Google.Apis.Auth" Version="1.78.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
