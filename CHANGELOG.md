@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-11-19
+
 ### Changed
 
 - `Microsoft.OpenApi` updated from 3.11.0 to 3.11.1, and `ArturRios.Configuration` from 2.0.0 to 2.0.1,
@@ -276,7 +278,8 @@ just a compile fix.
 - XML documentation across the public API. The configuration and client types live in the
   `ArturRios.Util.WebApi.Configuration` and `ArturRios.Util.WebApi.Client` namespaces.
 
-[Unreleased]: https://github.com/artur-rios/dotnet-webapi-util/compare/6.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/dotnet-webapi-util/compare/6.0.1...HEAD
+[6.0.1]: https://github.com/artur-rios/dotnet-webapi-util/compare/6.0.0...6.0.1
 [6.0.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.2.0...6.0.0
 [5.2.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.1.0...5.2.0
 [5.1.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.0.0...5.1.0
