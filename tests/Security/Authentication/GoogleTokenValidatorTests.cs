@@ -5,7 +5,7 @@ using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Authentication;
 
 [Trait("Category", "Unit")]
 public class GoogleTokenValidatorTests
@@ -77,5 +77,48 @@ public class GoogleTokenValidatorTests
 
         Assert.Null(result.User);
         Assert.Equal("Google email not verified", result.Error);
+    }
+
+    private sealed class CapturingVerifier(GoogleTokenPayload? payload) : IGoogleTokenVerifier
+    {
+        public string? Token { get; private set; }
+
+        public string[] Audiences { get; private set; } = [];
+
+        public Task<GoogleTokenPayload?> VerifyAsync(string token, IEnumerable<string> audiences)
+        {
+            Token = token;
+            Audiences = [.. audiences];
+
+            return Task.FromResult(payload);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GivenAGoogleTokenWithNoEmail_WhenValidating_ThenItIsRejectedBeforeAnyUserLookup(string email)
+    {
+        var validator = new GoogleTokenValidator(new FakeVerifier(new GoogleTokenPayload(email, "google-sub-1", true)),
+            Options());
+
+        var result = await validator.ValidateAsync("google-token",
+            ContextWithProvider(new StubProvider(new AuthenticatedUser(UserId, 1))));
+
+        Assert.Null(result.User);
+        Assert.Equal("Google token has no email", result.Error);
+    }
+
+    [Fact]
+    public async Task GivenConfiguredClientIds_WhenValidating_ThenTheTokenIsVerifiedAgainstThem()
+    {
+        var verifier = new CapturingVerifier(payload: null);
+        var options = new AuthenticationOptions { EnableGoogle = true, GoogleClientIds = { "client-id-1", "client-id-2" } };
+
+        await new GoogleTokenValidator(verifier, options).ValidateAsync("google-token",
+            ContextWithProvider(new StubProvider(null)));
+
+        Assert.Equal("google-token", verifier.Token);
+        Assert.Equal(["client-id-1", "client-id-2"], verifier.Audiences);
     }
 }

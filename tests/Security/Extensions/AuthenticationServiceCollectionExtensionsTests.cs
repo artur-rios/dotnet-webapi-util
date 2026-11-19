@@ -1,12 +1,15 @@
 using ArturRios.Util.WebApi.Security.Authentication;
+using ArturRios.Util.WebApi.Security.Configuration;
+using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Providers;
 using ArturRios.Util.WebApi.Security.Records;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Extensions;
 
 [Trait("Category", "Unit")]
 public class AuthenticationServiceCollectionExtensionsTests
@@ -128,5 +131,74 @@ public class AuthenticationServiceCollectionExtensionsTests
         public IAuthenticatedUser? GetAuthenticatedUserById(Guid id) => null;
 
         public IAuthenticatedUser? GetAuthenticatedUserByEmail(string email) => null;
+    }
+
+    [Fact]
+    public void GivenNoConfigureCallback_WhenAddingTheCachedProvider_ThenTheCachingDecoratorIsRegisteredWithAMemoryCache()
+    {
+        var services = new ServiceCollection();
+
+        services.AddCachedAuthenticationProvider<FakeAuthenticationProvider>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+
+        Assert.IsType<CachedAuthenticationProvider>(scope.ServiceProvider.GetRequiredService<IAuthenticationProvider>());
+        Assert.IsType<FakeAuthenticationProvider>(scope.ServiceProvider.GetRequiredService<FakeAuthenticationProvider>());
+        Assert.NotNull(scope.ServiceProvider.GetService<IMemoryCache>());
+    }
+
+    [Fact]
+    public void GivenOnlyGoogleIsEnabled_WhenAddingTokenAuthentication_ThenOnlyTheGoogleValidatorAndItsVerifierAreRegistered()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTokenAuthentication(options =>
+        {
+            options.EnableJwt = false;
+            options.EnableGoogle = true;
+            options.GoogleClientIds.Add("client-id-1");
+        });
+
+        var validator = Assert.Single(services, descriptor => descriptor.ServiceType == typeof(ITokenValidator));
+        Assert.Equal(typeof(GoogleTokenValidator), validator.ImplementationType);
+        Assert.Equal(typeof(GoogleTokenVerifier),
+            Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IGoogleTokenVerifier)).ImplementationType);
+    }
+
+    [Fact]
+    public void GivenAMapperIsAlreadyRegistered_WhenAddingTokenAuthentication_ThenThatMapperIsKept()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IAuthenticatedUserMapper, StubMapper>();
+
+        services.AddTokenAuthentication(_ => { });
+
+        Assert.Equal(typeof(StubMapper),
+            Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IAuthenticatedUserMapper)).ImplementationType);
+    }
+
+    [Fact]
+    public void GivenConfiguredOptions_WhenAddingTokenAuthentication_ThenThoseOptionsAreRegistered()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTokenAuthentication(options =>
+        {
+            options.Source = TokenSource.Cookie;
+            options.CookieName = "session";
+        });
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var registered = serviceProvider.GetRequiredService<AuthenticationOptions>();
+
+        Assert.Equal(TokenSource.Cookie, registered.Source);
+        Assert.Equal("session", registered.CookieName);
+    }
+
+    [Fact]
+    public void GivenANullConfigureCallback_WhenAddingTokenAuthentication_ThenItThrows()
+    {
+        Assert.Throws<ArgumentNullException>(() => new ServiceCollection().AddTokenAuthentication(null!));
     }
 }

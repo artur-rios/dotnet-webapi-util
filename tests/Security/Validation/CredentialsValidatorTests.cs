@@ -1,7 +1,7 @@
 using ArturRios.Util.WebApi.Security.Records;
 using ArturRios.Util.WebApi.Security.Validation;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Validation;
 
 [Trait("Category", "Unit")]
 public class CredentialsValidatorTests

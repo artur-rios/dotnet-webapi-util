@@ -9,7 +9,7 @@ using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Authentication;
 
 [Trait("Category", "Unit")]
 public class JwtTokenValidatorTests

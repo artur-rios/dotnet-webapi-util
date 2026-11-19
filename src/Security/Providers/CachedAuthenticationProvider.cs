@@ -34,7 +34,9 @@ public class CachedAuthenticationProvider(
 
         if (user is not null || _options.CacheMisses)
         {
-            cache.Set(key, user, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = _options.Ttl });
+            // Size 1: the cache may be the application's own, and one with a SizeLimit refuses an entry without a
+            // size. A cache without a limit ignores it.
+            cache.Set(key, user, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = _options.Ttl, Size = 1 });
         }
 
         return user;

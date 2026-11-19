@@ -7,11 +7,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-11-19
+
+### Changed
+
+- `Microsoft.OpenApi` updated from 3.11.0 to 3.11.1, and `ArturRios.Configuration` from 2.0.0 to 2.0.1,
+  `ArturRios.Jwt` from 1.4.1 to 1.4.2 and `ArturRios.Util` from 2.2.0 to 2.2.1.
+
+### Fixed
+
+- `CachedAuthenticationProvider` works with an `IMemoryCache` that has a `SizeLimit`. It cached users without a size,
+  which such a cache refuses, so every revalidated or Google-authenticated request failed with a 500 once the
+  application bounded its cache (`AddMemoryCache(o => o.SizeLimit = …)`). Each entry now has a size of 1.
+- `ExceptionMiddleware` starts the error response over instead of writing it on top of what the failed request had
+  set. A `Content-Length` the action set made the envelope a length mismatch, which aborted the connection, and a
+  `Content-Disposition` or `Cache-Control` sent the 500 as a download or let it be cached. The headers set before
+  the middleware ran, such as `TraceActivityMiddleware`'s `traceparent`, are kept.
+- The quick start in the README and the configuration guide maps its health checks with `.AllowAnonymous()`, and
+  registers the `JwtConfiguration` and `JwtHandler` that `AddTokenAuthentication` needs. As written, the app's
+  `/health` answered every probe with a 401, since `AuthenticationMiddleware` lets a request through without a
+  token only to an endpoint marked anonymous.
+
 ## [6.0.0] - 2026-11-14
 
 ### Changed
 
-- **Breaking:** `Swashbuckle.AspNetCore` updated from 10.2.3 to 11.0.1 and `Microsoft.OpenApi` from 2.13.0 to 3.11.0.
+- **Breaking:** `Swashbuckle.AspNetCore` updated from 10.2.3 to 11.0.1 and `Microsoft.OpenApi` from 2.7.5 to 3.11.0.
   `WebApiSwaggerOptions.ConfigureGenerator` hands the callback Swashbuckle 11's `SwaggerGenOptions`, so a callback (or
   any other code of the application) written against the Microsoft.OpenApi 2 object model may need changes; see
   Swashbuckle's v11 migration guide. The generated document is still OpenAPI 3.0.
@@ -19,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   loads no longer overrides environment variables the process already has: real environment variables now win over
   the file, and a key repeated within the file keeps its first value.
 - `FluentValidation` updated from 12.1.1 to 12.2.0 and `Google.Apis.Auth` from 1.76.0 to 1.78.0.
+- `ArturRios.Jwt` updated from 1.2.0 to 1.4.1 and `ArturRios.Util` from 2.1.0 to 2.2.0.
+- `Microsoft.AspNetCore.Authentication.JwtBearer` updated from 10.0.11 to 10.0.15.
 
 ## [5.2.0] - 2026-10-29
 
@@ -255,7 +278,8 @@ just a compile fix.
 - XML documentation across the public API. The configuration and client types live in the
   `ArturRios.Util.WebApi.Configuration` and `ArturRios.Util.WebApi.Client` namespaces.
 
-[Unreleased]: https://github.com/artur-rios/dotnet-webapi-util/compare/6.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/dotnet-webapi-util/compare/6.0.1...HEAD
+[6.0.1]: https://github.com/artur-rios/dotnet-webapi-util/compare/6.0.0...6.0.1
 [6.0.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.2.0...6.0.0
 [5.2.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.1.0...5.2.0
 [5.1.0]: https://github.com/artur-rios/dotnet-webapi-util/compare/5.0.0...5.1.0

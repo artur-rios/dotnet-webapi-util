@@ -1,6 +1,9 @@
 using System.Text;
+using System.Text.Json;
 using ArturRios.Configuration.Providers;
 using ArturRios.Jwt;
+using ArturRios.Output;
+using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Security.Attributes;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Configuration;
@@ -11,10 +14,11 @@ using ArturRios.Util.WebApi.Security.Mappers;
 using ArturRios.Util.WebApi.Security.Middleware;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Middleware;
 
 [Trait("Category", "Unit")]
 public class AuthenticationMiddlewareTests
@@ -258,5 +262,180 @@ public class AuthenticationMiddlewareTests
         await middleware.InvokeAsync(context);
 
         Assert.Equal("next", log.ToString());
+    }
+
+    /// <summary>Answers every token with the result it was given, and counts how often it was asked.</summary>
+    private sealed class FixedValidator(TokenValidationResult result) : ITokenValidator
+    {
+        public int Calls { get; private set; }
+
+        public Task<TokenValidationResult> ValidateAsync(string token, HttpContext context)
+        {
+            Calls++;
+
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class StartedResponseFeature : HttpResponseFeature
+    {
+        public override bool HasStarted => true;
+    }
+
+    private static SettingsProvider SwaggerSettings(bool enabled) =>
+        new(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [AppSettingsKeys.SwaggerEnabled] = enabled.ToString() })
+            .Build());
+
+    private static async Task<ProcessOutput> ReadOutput(HttpContext context) =>
+        JsonSerializer.Deserialize<ProcessOutput>(await ReadBody(context), JsonSerializerOptions.Web)!;
+
+    [Theory]
+    [InlineData("/swagger")]
+    [InlineData("/swagger/v1/swagger.json")]
+    [InlineData("/SWAGGER/index.html")]
+    public async Task GivenSwaggerIsEnabled_WhenASwaggerRouteIsRequestedWithoutAToken_ThenValidationIsSkipped(string path)
+    {
+        var (context, log) = BuildContext(headerToken: null, provider: null);
+        context.Request.Path = path;
+        var validator = new FixedValidator(new TokenValidationResult(null, "rejected"));
+        var middleware = new AuthenticationMiddleware(_ =>
+        {
+            log.Append("next");
+
+            return Task.CompletedTask;
+        }, SwaggerSettings(enabled: true), new AuthenticationOptions(), [validator]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+        Assert.Equal(0, validator.Calls);
+    }
+
+    [Theory]
+    [InlineData(false, "/swagger/v1/swagger.json")]
+    [InlineData(true, "/swaggerish")]
+    [InlineData(true, "/api/swagger")]
+    public async Task GivenARouteThatIsNotAnEnabledSwaggerRoute_WhenRequestedWithoutAToken_ThenUnauthorizedIsReturned(
+        bool swaggerEnabled, string path)
+    {
+        var (context, log) = BuildContext(headerToken: null, provider: null);
+        context.Request.Path = path;
+        var middleware = new AuthenticationMiddleware(_ =>
+        {
+            log.Append("next");
+
+            return Task.CompletedTask;
+        }, SwaggerSettings(swaggerEnabled), new AuthenticationOptions(),
+            [new FixedValidator(new TokenValidationResult(null, "rejected"))]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Empty(log.ToString());
+    }
+
+    [Fact]
+    public async Task GivenNoSwaggerSetting_WhenASwaggerRouteIsRequestedWithoutAToken_ThenUnauthorizedIsReturned()
+    {
+        var (context, _) = BuildContext(headerToken: null, provider: null);
+        context.Request.Path = "/swagger/index.html";
+        var middleware = Middleware(_ => Task.CompletedTask, new AuthenticationOptions(),
+            [new FixedValidator(new TokenValidationResult(null, "rejected"))]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GivenEveryValidatorRejectsTheToken_WhenAuthenticating_ThenEachIsTriedAndTheLastOnesErrorIsReported()
+    {
+        var (context, log) = BuildContext("some-token", provider: null);
+        var first = new FixedValidator(new TokenValidationResult(null, "first error"));
+        var second = new FixedValidator(new TokenValidationResult(null, "second error"));
+        var middleware = Middleware(_ =>
+        {
+            log.Append("next");
+
+            return Task.CompletedTask;
+        }, new AuthenticationOptions(), [first, second]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal(["second error"], (await ReadOutput(context)).Errors);
+        Assert.Equal(1, first.Calls);
+        Assert.Equal(1, second.Calls);
+        Assert.Empty(log.ToString());
+    }
+
+    [Fact]
+    public async Task GivenTheFirstValidatorAcceptsTheToken_WhenAuthenticating_ThenTheOthersAreNotTried()
+    {
+        var (context, log) = BuildContext("some-token", provider: null);
+        var first = new FixedValidator(new TokenValidationResult(new AuthenticatedUser(UserId, 1), null));
+        var second = new FixedValidator(new TokenValidationResult(new AuthenticatedUser(OtherId, 1), null));
+        var middleware = Middleware(_ =>
+        {
+            log.Append("next");
+
+            return Task.CompletedTask;
+        }, new AuthenticationOptions(), [first, second]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal("next", log.ToString());
+        Assert.Equal(UserId, context.GetUser()?.Id);
+        Assert.Equal(0, second.Calls);
+    }
+
+    [Fact]
+    public async Task GivenAValidatorThatRejectsWithoutSayingWhy_WhenAuthenticating_ThenTheErrorIsUnauthorized()
+    {
+        var (context, _) = BuildContext("some-token", provider: null);
+        var middleware = Middleware(_ => Task.CompletedTask, new AuthenticationOptions(),
+            [new FixedValidator(new TokenValidationResult(null, null))]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal(["Unauthorized"], (await ReadOutput(context)).Errors);
+    }
+
+    [Fact]
+    public async Task GivenNoValidatorIsRegistered_WhenAuthenticatingWithAToken_ThenUnauthorizedIsReturned()
+    {
+        var (context, log) = BuildContext("some-token", provider: null);
+        var middleware = Middleware(_ =>
+        {
+            log.Append("next");
+
+            return Task.CompletedTask;
+        }, new AuthenticationOptions(), []);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal(["Unauthorized"], (await ReadOutput(context)).Errors);
+        Assert.Empty(log.ToString());
+    }
+
+    [Fact]
+    public async Task GivenTheResponseHasStarted_WhenTheTokenIsRejected_ThenNothingMoreIsWritten()
+    {
+        var (context, log) = BuildContext("some-token", provider: null);
+        context.Features.Set<IHttpResponseFeature>(new StartedResponseFeature());
+        var middleware = Middleware(_ =>
+        {
+            log.Append("next");
+
+            return Task.CompletedTask;
+        }, new AuthenticationOptions(), [new FixedValidator(new TokenValidationResult(null, "rejected"))]);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Empty(log.ToString());
     }
 }

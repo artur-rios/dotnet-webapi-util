@@ -1,132 +1,76 @@
-using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ArturRios.Configuration.Providers;
-using ArturRios.Jwt;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Extensions;
 using ArturRios.Util.WebApi.Middleware;
-using ArturRios.Util.WebApi.Security.Attributes;
-using ArturRios.Util.WebApi.Security.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace ArturRios.Util.WebApi.Tests.Configuration;
 
-/// <summary>The controller the standard pipeline is driven through. Public and top-level so MVC discovers it.</summary>
-[ApiController]
-[Route("samples")]
-public class StartupSampleController : ControllerBase
-{
-    public sealed class SampleInput
-    {
-        [Required]
-        public string? Name { get; set; }
-    }
-
-    [HttpGet]
-    [AllowAnonymous]
-    public string Get() => "ok";
-
-    [HttpGet("secure")]
-    public string Secure() => "secret";
-
-    [HttpGet("boom")]
-    [AllowAnonymous]
-    public string Boom() => throw new InvalidOperationException("internal detail");
-
-    [HttpPost]
-    [AllowAnonymous]
-    public string Post(SampleInput input) => input.Name!;
-}
-
-/// <summary>Adds a marker header, so a test can tell an extra middleware from the options ran.</summary>
-public class MarkerMiddleware(RequestDelegate next) : WebApiMiddleware
-{
-    public Task InvokeAsync(HttpContext context)
-    {
-        context.Response.Headers["X-Marker"] = "1";
-
-        return next(context);
-    }
-}
-
 /// <summary>
 /// Drives the standard sequence <see cref="WebApiStartup"/> builds the application with through a real test host,
-/// so configuration, services, middleware order, Swagger and the controllers are exercised together.
+/// so configuration, services, middleware order and the controllers are exercised together; and Build, Run and
+/// RunAsync themselves.
 /// </summary>
 [Trait("Category", "Functional")]
-public sealed class WebApiStartupTests : IAsyncLifetime
+public sealed class WebApiStartupTests : WebApiStartupTestHost
 {
-    private const string Secret = "super-secret-signing-key-with-enough-length-1234567890";
-
-    private readonly List<WebApplication> _apps = [];
-
-    private sealed class TestStartup(
-        string[] args,
-        Action<WebApiStartupOptions> configureOptions,
-        Action<WebApplicationBuilder> configureServices) : WebApiStartup(args, configureOptions)
+    /// <summary>A startup that takes the standard options, and whose application stops itself once it has started,
+    /// so Run and RunAsync return.</summary>
+    private sealed class SelfStoppingStartup(string[] args) : WebApiStartup(args)
     {
-        public WebApiParameters PublicParameters => Parameters;
+        public StartedSignal Signal { get; } = new();
 
         protected override void ConfigureServices(WebApplicationBuilder builder)
         {
             builder.WebHost.UseTestServer();
-            builder.Services.AddControllers().AddApplicationPart(typeof(StartupSampleController).Assembly);
-
-            configureServices(builder);
+            builder.Services.AddSingleton(Signal);
+            builder.Services.AddHostedService<StopOnceStarted>();
         }
     }
 
-    private async Task<HttpClient> Start(string environment = "Production",
-        Action<WebApiStartupOptions>? configureOptions = null, Action<WebApplicationBuilder>? configureServices = null,
-        Action<WebApplication>? configureApp = null)
+    private sealed class StartedSignal
     {
-        var startup = new TestStartup(
-            [$"Environment:{environment}", "UseAppSettings:false", "UseEnvFile:false"],
-            configureOptions ?? (_ => { }),
-            configureServices ?? (_ => { }));
-
-        var app = startup.Build();
-
-        configureApp?.Invoke(app);
-
-        _apps.Add(app);
-
-        await app.StartAsync();
-
-        return app.GetTestClient();
+        public bool Started { get; set; }
     }
 
-    public Task InitializeAsync() => Task.CompletedTask;
-
-    public async Task DisposeAsync()
+    private sealed class StopOnceStarted(IHostApplicationLifetime lifetime, StartedSignal signal) : IHostedService
     {
-        foreach (var app in _apps)
+        public Task StartAsync(CancellationToken cancellationToken)
         {
-            await app.DisposeAsync();
+            lifetime.ApplicationStarted.Register(() =>
+            {
+                signal.Started = true;
+                lifetime.StopApplication();
+            });
+
+            return Task.CompletedTask;
         }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
+
+    private static readonly string[] SelfStoppingArgs = ["Environment:Production", "UseAppSettings:false", "UseEnvFile:false"];
 
     [Fact]
     public async Task GivenTheStandardSequence_WhenAControllerIsCalled_ThenItAnswersWithATraceparent()
     {
         var client = await Start();
 
-        var response = await client.GetAsync("/samples");
+        var response = await client.GetAsync("/samples", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+        Assert.Equal("ok", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.True(response.Headers.Contains("traceparent"));
     }
 
@@ -135,12 +79,12 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     {
         var client = await Start();
 
-        var response = await client.GetAsync("/samples/boom");
+        var response = await client.GetAsync("/samples/boom", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
         var output = JsonSerializer.Deserialize<DataOutput<string>>(
-            await response.Content.ReadAsStringAsync(), JsonSerializerOptions.Web)!;
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), JsonSerializerOptions.Web)!;
 
         Assert.False(output.Success);
         Assert.DoesNotContain(output.Errors, error => error.Contains("internal detail"));
@@ -151,12 +95,12 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     {
         var client = await Start();
 
-        var response = await client.PostAsJsonAsync("/samples", new { });
+        var response = await client.PostAsJsonAsync("/samples", new { }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var output = JsonSerializer.Deserialize<DataOutput<string>>(
-            await response.Content.ReadAsStringAsync(), JsonSerializerOptions.Web)!;
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), JsonSerializerOptions.Web)!;
 
         Assert.False(output.Success);
         Assert.Contains(output.Errors, error => error.Contains("Name"));
@@ -167,100 +111,10 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     {
         var client = await Start(configureOptions: options => options.UseInvalidModelStateEnvelope = false);
 
-        var response = await client.PostAsJsonAsync("/samples", new { });
+        var response = await client.PostAsJsonAsync("/samples", new { }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-    }
-
-    [Fact]
-    public async Task GivenTheDevelopmentEnvironment_WhenTheSwaggerDocumentIsRequested_ThenItIsServed()
-    {
-        var client = await Start("Development");
-
-        var response = await client.GetAsync("/swagger/v1/swagger.json");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task GivenTheProductionEnvironment_WhenTheSwaggerDocumentIsRequested_ThenItIsNotServed()
-    {
-        var client = await Start("Production");
-
-        var response = await client.GetAsync("/swagger/v1/swagger.json");
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task GivenSwaggerAllowedInProductionByTheOptions_WhenTheDocumentIsRequested_ThenItIsServed()
-    {
-        var client = await Start("Production",
-            options => options.Swagger.AllowedEnvironments = [ArturRios.Configuration.Enums.EnvironmentType.Production]);
-
-        var response = await client.GetAsync("/swagger/v1/swagger.json");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task GivenJwtAuthenticationInTheSwaggerOptions_WhenTheDocumentIsRequested_ThenItRequiresTheBearerScheme()
-    {
-        var client = await Start("Development", options => options.Swagger.JwtAuthentication = true);
-
-        using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
-        var root = document.RootElement;
-
-        Assert.Equal("http",
-            root.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("type")
-                .GetString());
-
-        // An empty requirement ({}) tells Swagger UI the operations need no credentials, so the token entered
-        // under "Authorize" would never be sent.
-        var requirement = Assert.Single(root.GetProperty("security").EnumerateArray());
-        Assert.True(requirement.TryGetProperty("Bearer", out _), requirement.ToString());
-    }
-
-    [Fact]
-    public async Task GivenTokenAuthenticationIsRegistered_WhenASecuredActionIsCalledWithoutAToken_ThenUnauthorizedArrives()
-    {
-        var client = await Start(configureServices: AddJwtAuthentication);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/samples/secure")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/samples")).StatusCode);
-    }
-
-    [Fact]
-    public async Task GivenACorsPolicyAndTokenAuthentication_WhenAPreflightIsSent_ThenItPassesWithoutAToken()
-    {
-        var client = await Start(
-            configureOptions: options => options.CorsPolicy = "frontend",
-            configureServices: builder =>
-            {
-                AddJwtAuthentication(builder);
-                builder.Services.AddCors(cors => cors.AddPolicy("frontend", policy => policy
-                    .WithOrigins("https://app.example.test").AllowAnyHeader().AllowAnyMethod()));
-            });
-
-        var preflight = new HttpRequestMessage(HttpMethod.Options, "/samples/secure");
-        preflight.Headers.Add("Origin", "https://app.example.test");
-        preflight.Headers.Add("Access-Control-Request-Method", "GET");
-
-        var response = await client.SendAsync(preflight);
-
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal("https://app.example.test", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
-    }
-
-    [Fact]
-    public async Task GivenTokenAuthenticationAndSwaggerInDevelopment_WhenTheDocumentIsRequested_ThenNoTokenIsNeeded()
-    {
-        var client = await Start("Development", configureServices: AddJwtAuthentication);
-
-        var response = await client.GetAsync("/swagger/v1/swagger.json");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -278,7 +132,7 @@ public sealed class WebApiStartupTests : IAsyncLifetime
         var request = new HttpRequestMessage(HttpMethod.Get, "/ip");
         request.Headers.Add("X-Forwarded-For", "198.51.100.9");
 
-        Assert.Equal("198.51.100.9", await (await client.SendAsync(request)).Content.ReadAsStringAsync());
+        Assert.Equal("198.51.100.9", await (await client.SendAsync(request, TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -290,7 +144,7 @@ public sealed class WebApiStartupTests : IAsyncLifetime
         var request = new HttpRequestMessage(HttpMethod.Get, "/ip");
         request.Headers.Add("X-Forwarded-For", "198.51.100.9");
 
-        Assert.Equal("none", await (await client.SendAsync(request)).Content.ReadAsStringAsync());
+        Assert.Equal("none", await (await client.SendAsync(request, TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -312,19 +166,11 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GivenNoTokenAuthenticationIsRegistered_WhenASecuredActionIsCalled_ThenNoAuthenticationRuns()
-    {
-        var client = await Start();
-
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/samples/secure")).StatusCode);
-    }
-
-    [Fact]
     public async Task GivenAnExtraMiddlewareInTheOptions_WhenARequestIsMade_ThenItRuns()
     {
         var client = await Start(configureOptions: options => options.Middlewares.Add(typeof(MarkerMiddleware)));
 
-        var response = await client.GetAsync("/samples");
+        var response = await client.GetAsync("/samples", TestContext.Current.CancellationToken);
 
         Assert.Equal("1", response.Headers.GetValues("X-Marker").Single());
     }
@@ -334,7 +180,7 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     {
         var client = await Start(configureApp: app => app.MapGet("/health", () => "healthy"));
 
-        Assert.Equal("healthy", await client.GetStringAsync("/health"));
+        Assert.Equal("healthy", await client.GetStringAsync("/health", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -351,7 +197,7 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     {
         var startup = new TestStartup(["UseAppSettings:false", "UseEnvFile:false"], _ => { }, _ => { });
 
-        _apps.Add(startup.Build());
+        Apps.Add(startup.Build());
 
         Assert.Throws<InvalidOperationException>(() => startup.Build());
     }
@@ -363,7 +209,7 @@ public sealed class WebApiStartupTests : IAsyncLifetime
             _ => { }, _ => { });
 
         var app = startup.Build();
-        _apps.Add(app);
+        Apps.Add(app);
 
         Assert.Equal("Staging", app.Environment.EnvironmentName);
         Assert.Same(startup.PublicParameters, app.Services.GetRequiredService<WebApiParameters>());
@@ -371,80 +217,46 @@ public sealed class WebApiStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public void GivenSwaggerIsAllowed_WhenBuilding_ThenTheSwaggerMarkerIsSetForTheAuthenticationBypass()
+    public async Task GivenAStartup_WhenRunAsynchronously_ThenTheApplicationStartsAndRunsUntilItIsStopped()
     {
-        var startup = new TestStartup(["Environment:Development", "UseAppSettings:false", "UseEnvFile:false"],
-            _ => { }, _ => { });
+        var startup = new SelfStoppingStartup(SelfStoppingArgs);
+
+        await startup.RunAsync().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        Assert.True(startup.Signal.Started);
+    }
+
+    [Fact]
+    public async Task GivenAStartup_WhenRun_ThenTheApplicationStartsAndRunsUntilItIsStopped()
+    {
+        var startup = new SelfStoppingStartup(SelfStoppingArgs);
+
+        await Task.Run(startup.Run, TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        Assert.True(startup.Signal.Started);
+    }
+
+    [Fact]
+    public void GivenTheStartupWithTheStandardOptions_WhenBuilt_ThenTheInvalidModelStateEnvelopeIsOn()
+    {
+        var startup = new SelfStoppingStartup(SelfStoppingArgs);
 
         var app = startup.Build();
-        _apps.Add(app);
+        Apps.Add(app);
 
-        var settings = new SettingsProvider(app.Services.GetRequiredService<IConfiguration>());
-        Assert.True(settings.GetBool(AppSettingsKeys.SwaggerEnabled));
+        var factory = app.Services.GetRequiredService<IOptions<ApiBehaviorOptions>>().Value.InvalidModelStateResponseFactory;
+        var context = new ActionContext(new DefaultHttpContext(), new Microsoft.AspNetCore.Routing.RouteData(),
+            new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor());
+        context.ModelState.AddModelError("Name", "required");
+
+        Assert.IsType<DataOutput<string>>(Assert.IsType<BadRequestObjectResult>(factory(context)).Value);
     }
 
     [Fact]
-    public async Task GivenValidateIssuerWithNoConfiguredIssuer_WhenTheAppStarts_ThenStartupFailsWithAClearError()
+    public void GivenANullConfigureCallback_WhenTheStartupIsCreated_ThenItThrows()
     {
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => Start(configureServices: builder =>
-            AddJwtAuthenticationWith(builder, issuer: string.Empty, configure: options => options.ValidateIssuer = true)));
-
-        Assert.Contains("ValidateIssuer", exception.Message);
-        Assert.Contains("JwtConfiguration.Issuer", exception.Message);
-    }
-
-    [Fact]
-    public async Task GivenValidateAudienceWithNoConfiguredAudience_WhenTheAppStarts_ThenStartupFailsWithAClearError()
-    {
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => Start(configureServices: builder =>
-            AddJwtAuthenticationWith(builder, audience: " ", configure: options => options.ValidateAudience = true)));
-
-        Assert.Contains("ValidateAudience", exception.Message);
-        Assert.Contains("JwtConfiguration.Audience", exception.Message);
-    }
-
-    [Theory]
-    [InlineData("issuer", "audience", HttpStatusCode.OK)]
-    [InlineData("someone-else", "audience", HttpStatusCode.Unauthorized)]
-    [InlineData("issuer", "another-app", HttpStatusCode.Unauthorized)]
-    public async Task GivenIssuerAndAudienceChecks_WhenATokenIsSent_ThenOnlyOneForThisIssuerAndAudienceIsAccepted(
-        string issuer, string audience, HttpStatusCode expected)
-    {
-        var client = await Start(configureServices: builder => AddJwtAuthenticationWith(builder, configure: options =>
-        {
-            options.ValidateIssuer = true;
-            options.ValidateAudience = true;
-        }));
-
-        var token = new JwtHandler().CreateToken(new JwtConfiguration(3600, issuer, audience, Secret,
-            new Dictionary<string, string> { { "id", Guid.NewGuid().ToString() }, { "role", "1" } }));
-        var request = new HttpRequestMessage(HttpMethod.Get, "/samples/secure");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-        Assert.Equal(expected, (await client.SendAsync(request)).StatusCode);
-    }
-
-    [Fact]
-    public async Task GivenDefaultAuthenticationOptions_WhenATokenForAnotherIssuerAndAudienceIsSent_ThenItIsAccepted()
-    {
-        var client = await Start(configureServices: AddJwtAuthentication);
-
-        var token = new JwtHandler().CreateToken(new JwtConfiguration(3600, "someone-else", "another-app", Secret,
-            new Dictionary<string, string> { { "id", Guid.NewGuid().ToString() }, { "role", "1" } }));
-        var request = new HttpRequestMessage(HttpMethod.Get, "/samples/secure");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
-    }
-
-    private static void AddJwtAuthentication(WebApplicationBuilder builder) => AddJwtAuthenticationWith(builder);
-
-    private static void AddJwtAuthenticationWith(WebApplicationBuilder builder, string issuer = "issuer",
-        string audience = "audience", Action<AuthenticationOptions>? configure = null)
-    {
-        builder.Services.AddSingleton(
-            new JwtConfiguration(3600, issuer, audience, Secret, new Dictionary<string, string>()));
-        builder.Services.AddSingleton<JwtHandler>();
-        builder.Services.AddTokenAuthentication(configure ?? (_ => { }));
+        Assert.Throws<ArgumentNullException>(() =>
+            new TestStartup(["UseAppSettings:false", "UseEnvFile:false"], null!, _ => { }));
     }
 }

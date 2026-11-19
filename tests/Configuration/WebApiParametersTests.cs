@@ -110,4 +110,70 @@ public class WebApiParametersTests
     {
         Assert.Null(new WebApiParameters([]).ToWebApplicationOptions().EnvironmentName);
     }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("UseEnvFile")]
+    [InlineData("")]
+    public void GivenAnArgumentWithoutAColon_WhenParsing_ThenItIsIgnored(string arg)
+    {
+        var parameters = new WebApiParameters([arg, "UseEnvFile:false"]);
+
+        Assert.Equal(string.Empty, parameters.EnvironmentName);
+        Assert.False(parameters.UseEnvFile);
+        Assert.True(parameters.UseAppSettings);
+    }
+
+    [Fact]
+    public void GivenAnUnknownKey_WhenParsing_ThenItIsIgnored()
+    {
+        var parameters = new WebApiParameters(["Colour:blue"]);
+
+        Assert.Equal(string.Empty, parameters.EnvironmentName);
+        Assert.True(parameters.UseAppSettings);
+        Assert.True(parameters.UseEnvFile);
+        Assert.True(parameters.EnableSwaggerDocs);
+        Assert.Empty(parameters.SwaggerEnvironments);
+    }
+
+    [Theory]
+    [InlineData("UseEnvFile:maybe")]
+    [InlineData("UseEnvFile:")]
+    public void GivenABooleanArgumentThatIsNotABoolean_WhenParsing_ThenItDefaultsToTrue(string arg)
+    {
+        Assert.True(new WebApiParameters([arg]).UseEnvFile);
+    }
+
+    [Fact]
+    public void GivenSpacesAroundTheKeyAndValue_WhenParsing_ThenTheyAreTrimmed()
+    {
+        var parameters = new WebApiParameters([" Environment : Staging ", " UseEnvFile : false "]);
+
+        Assert.Equal("Staging", parameters.EnvironmentName);
+        Assert.False(parameters.UseEnvFile);
+    }
+
+    [Theory]
+    [InlineData("SwaggerEnvironments:Development,Staging")]
+    [InlineData("SwaggerEnvironments:[Development,Staging")]
+    [InlineData("SwaggerEnvironments:Development,Staging]")]
+    public void GivenSwaggerEnvironmentsWithoutBothBrackets_WhenParsing_ThenTheyAreIgnored(string arg)
+    {
+        Assert.Empty(new WebApiParameters([arg]).SwaggerEnvironments);
+    }
+
+    [Fact]
+    public void GivenOnlyInvalidSwaggerEnvironments_WhenReadingThem_ThenTheDefaultsComeBack()
+    {
+        var parameters = new WebApiParameters(["SwaggerEnvironments:[Nowhere, Mars]"]);
+
+        Assert.Equal(["Nowhere", "Mars"], parameters.SwaggerEnvironments);
+        Assert.Equal(new WebApiParameters([]).GetSwaggerEnvironments(), parameters.GetSwaggerEnvironments());
+    }
+
+    [Fact]
+    public void GivenTheEnvironmentNameInAnotherCase_WhenCheckingSwagger_ThenItStillMatches()
+    {
+        Assert.True(new WebApiParameters([]).IsSwaggerAllowed("development"));
+    }
 }

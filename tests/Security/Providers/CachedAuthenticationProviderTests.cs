@@ -3,7 +3,7 @@ using ArturRios.Util.WebApi.Security.Providers;
 using ArturRios.Util.WebApi.Security.Records;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace ArturRios.Util.WebApi.Tests.Security;
+namespace ArturRios.Util.WebApi.Tests.Security.Providers;
 
 [Trait("Category", "Unit")]
 public class CachedAuthenticationProviderTests
@@ -134,6 +134,23 @@ public class CachedAuthenticationProviderTests
 
         provider.GetAuthenticatedUserById(FirstId);
         provider.GetAuthenticatedUserByEmail("a@b.com");
+
+        Assert.Equal(1, inner.IdCallCount);
+        Assert.Equal(1, inner.EmailCallCount);
+    }
+
+    [Fact]
+    public void GivenACacheWithASizeLimit_WhenUsersAreLookedUp_ThenTheyAreCachedInsteadOfFailing()
+    {
+        // An application that bounds its IMemoryCache (SizeLimit) must give every entry a size, or the cache throws.
+        using var cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = 10 });
+        var inner = new CountingProvider(byId: new AuthenticatedUser(FirstId, 1), byEmail: new AuthenticatedUser(SecondId, 1));
+        var provider = new CachedAuthenticationProvider(inner, cache,
+            new CachedAuthenticationProviderOptions { CacheMisses = true });
+
+        Assert.Equal(FirstId, provider.GetAuthenticatedUserById(FirstId)?.Id);
+        Assert.Equal(FirstId, provider.GetAuthenticatedUserById(FirstId)?.Id);
+        Assert.Equal(SecondId, provider.GetAuthenticatedUserByEmail("a@b.com")?.Id);
 
         Assert.Equal(1, inner.IdCallCount);
         Assert.Equal(1, inner.EmailCallCount);
