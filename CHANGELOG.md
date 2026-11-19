@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- `ArturRios.Configuration` updated from 2.0.1 to 2.0.2, `ArturRios.Jwt` from 1.4.2 to 1.5.0 and `ArturRios.Util`
+  from 2.2.1 to 2.3.0.
+
 ## [6.0.1] - 2026-11-19
 
 ### Changed
