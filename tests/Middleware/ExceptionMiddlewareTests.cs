@@ -241,4 +241,35 @@ public class ExceptionMiddlewareTests
         Assert.False(output.Success);
         Assert.Equal(["turned off", "try later"], output.Errors);
     }
+
+    [Fact]
+    public async Task GivenAnActionThatSetResponseHeadersAndThrew_WhenTheErrorIsWritten_ThenOnlyTheErrorsHeadersAreSent()
+    {
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+        // Set before the middleware runs, as TraceActivityMiddleware, which runs outside it, sets it.
+        context.Response.Headers["traceparent"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+        await new ExceptionMiddleware(async ctx =>
+        {
+            ctx.Response.StatusCode = StatusCodes.Status200OK;
+            ctx.Response.ContentLength = 1024;
+            ctx.Response.ContentType = "text/csv";
+            ctx.Response.Headers.ContentDisposition = "attachment; filename=report.csv";
+            ctx.Response.Headers.CacheControl = "public, max-age=3600";
+            await ctx.Response.Body.WriteAsync("Id,Name\n"u8.ToArray());
+            throw new InvalidOperationException("boom");
+        }, NullLogger<ExceptionMiddleware>.Instance).InvokeAsync(context);
+
+        Assert.Equal(500, context.Response.StatusCode);
+        Assert.Null(context.Response.ContentLength);
+        Assert.False(context.Response.Headers.ContainsKey("Content-Disposition"));
+        Assert.False(context.Response.Headers.ContainsKey("Cache-Control"));
+        Assert.StartsWith("application/json", context.Response.ContentType);
+        Assert.Equal("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", context.Response.Headers["traceparent"]);
+
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync(TestContext.Current.CancellationToken);
+        Assert.StartsWith("{", body);
+        Assert.Contains("Internal server error", body);
+    }
 }

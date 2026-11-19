@@ -47,6 +47,9 @@ public class Startup(string[] args) : WebApiStartup(args, options =>
 {
     protected override void ConfigureServices(WebApplicationBuilder builder)
     {
+        // AddTokenAuthentication also needs JwtConfiguration and JwtHandler registered: see Security.
+        builder.Services.AddSingleton(new JwtConfiguration(3600, "my-api", "my-app", builder.Configuration["Jwt:Secret"]!, []));
+        builder.Services.AddSingleton<JwtHandler>();
         builder.Services.AddTokenAuthentication(_ => { });
         builder.Services.AddHealthChecks();
         builder.Services.AddScoped<IMyService, MyService>();
@@ -54,7 +57,7 @@ public class Startup(string[] args) : WebApiStartup(args, options =>
 }
 
 var app = new Startup(args).Build();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous(); // probes send no token
 app.Run();
 ```
 

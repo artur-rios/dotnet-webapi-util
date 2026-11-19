@@ -5,6 +5,7 @@ using ArturRios.Util.WebApi.Extensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 
 namespace ArturRios.Util.WebApi.Middleware;
 
@@ -28,6 +29,10 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
     /// <param name="httpContext">The current HTTP context.</param>
     public async Task InvokeAsync(HttpContext httpContext)
     {
+        // The headers set before this middleware runs, by the ones outside it (TraceActivityMiddleware's
+        // traceparent, say), belong on every response, the error too.
+        var outerHeaders = httpContext.Response.Headers.ToArray();
+
         try
         {
             await next(httpContext);
@@ -39,11 +44,12 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
         }
         catch (Exception ex) when (!httpContext.Response.HasStarted)
         {
-            await HandleException(httpContext, ex);
+            await HandleException(httpContext, ex, outerHeaders);
         }
     }
 
-    private async Task HandleException(HttpContext context, Exception exception)
+    private async Task HandleException(HttpContext context, Exception exception,
+        KeyValuePair<string, StringValues>[] outerHeaders)
     {
         if (context.RequestAborted.IsCancellationRequested)
         {
@@ -89,6 +95,16 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
         var output = DataOutput<string>.New
             .WithData(string.Empty)
             .WithErrors(errors);
+
+        // What the failed request had set on the response is not the error's: a Content-Length made the envelope
+        // a length mismatch the server aborts, and a Content-Disposition or Cache-Control sent it as the download
+        // or cached it as the result. Start the response over, keeping only the headers set outside this middleware.
+        context.Response.Clear();
+
+        foreach (var (name, value) in outerHeaders)
+        {
+            context.Response.Headers[name] = value;
+        }
 
         await context.Response.WriteOutputAsync(statusCode, output);
     }
