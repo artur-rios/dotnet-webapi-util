@@ -7,6 +7,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- `Microsoft.OpenApi` updated from 3.11.0 to 3.11.1, and `ArturRios.Configuration` from 2.0.0 to 2.0.1,
+  `ArturRios.Jwt` from 1.4.1 to 1.4.2 and `ArturRios.Util` from 2.2.0 to 2.2.1.
+
+### Fixed
+
+- `CachedAuthenticationProvider` works with an `IMemoryCache` that has a `SizeLimit`. It cached users without a size,
+  which such a cache refuses, so every revalidated or Google-authenticated request failed with a 500 once the
+  application bounded its cache (`AddMemoryCache(o => o.SizeLimit = …)`). Each entry now has a size of 1.
+- `ExceptionMiddleware` starts the error response over instead of writing it on top of what the failed request had
+  set. A `Content-Length` the action set made the envelope a length mismatch, which aborted the connection, and a
+  `Content-Disposition` or `Cache-Control` sent the 500 as a download or let it be cached. The headers set before
+  the middleware ran, such as `TraceActivityMiddleware`'s `traceparent`, are kept.
+- The quick start in the README and the configuration guide maps its health checks with `.AllowAnonymous()`, and
+  registers the `JwtConfiguration` and `JwtHandler` that `AddTokenAuthentication` needs. As written, the app's
+  `/health` answered every probe with a 401, since `AuthenticationMiddleware` lets a request through without a
+  token only to an endpoint marked anonymous.
+
 ## [6.0.0] - 2026-11-14
 
 ### Changed

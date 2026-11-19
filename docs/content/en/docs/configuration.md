@@ -71,16 +71,23 @@ public class Startup(string[] args) : WebApiStartup(args, options =>
 {
     protected override void ConfigureServices(WebApplicationBuilder builder)
     {
-        builder.Services.AddTokenAuthentication(_ => { }); // see Security
+        // AddTokenAuthentication also needs JwtConfiguration and JwtHandler registered: see Security.
+        builder.Services.AddSingleton(new JwtConfiguration(3600, "my-api", "my-app", builder.Configuration["Jwt:Secret"]!, []));
+        builder.Services.AddSingleton<JwtHandler>();
+        builder.Services.AddTokenAuthentication(_ => { });
         builder.Services.AddHealthChecks();
         builder.Services.AddScoped<IMyService, MyService>();
     }
 }
 
 var app = new Startup(args).Build();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous(); // probes send no token
 app.Run();
 ```
+
+With token authentication on, `AuthenticationMiddleware` lets a request through without a token only to an
+endpoint marked anonymous, which health checks are not by default: without `.AllowAnonymous()`, a liveness or
+readiness probe gets a 401.
 
 `AddTokenAuthentication` validates its options as soon as it's called. The one check it can't make there —
 `ValidateIssuer`/`ValidateAudience` on while `JwtConfiguration.Issuer`/`Audience` is blank, since
@@ -129,7 +136,9 @@ builder.Services.AddControllers();
 builder.Services.AddInvalidModelStateEnvelope();
 builder.AddWebApiSwagger(parameters, swagger => swagger.JwtAuthentication = true);
 
-builder.Services.AddTokenAuthentication(_ => { }); // see Security
+builder.Services.AddSingleton(new JwtConfiguration(3600, "my-api", "my-app", builder.Configuration["Jwt:Secret"]!, [])); // see Security
+builder.Services.AddSingleton<JwtHandler>();
+builder.Services.AddTokenAuthentication(_ => { });
 builder.Services.AddHealthChecks();
 builder.Services.AddScoped<IMyService, MyService>();
 
@@ -138,7 +147,7 @@ var app = builder.Build();
 app.UseStandardMiddlewares(); // pass a CORS policy name to apply one before authentication
 app.UseWebApiMiddlewares(typeof(MyMiddleware));
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous(); // probes send no token
 
 app.Run();
 ```

@@ -1,5 +1,6 @@
 using System.Net;
 using ArturRios.Jwt;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Util.WebApi.Tests.Configuration;
@@ -40,6 +41,32 @@ public sealed class WebApiStartupAuthenticationTests : WebApiStartupTestHost
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Equal("https://app.example.test", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+    }
+
+    // The README's quick start maps health checks next to token authentication: a probe sends no token.
+    [Theory]
+    [InlineData(false, HttpStatusCode.Unauthorized)]
+    [InlineData(true, HttpStatusCode.OK)]
+    public async Task GivenTokenAuthentication_WhenAHealthCheckIsProbedWithoutAToken_ThenOnlyAnAnonymousOneAnswers(
+        bool allowAnonymous, HttpStatusCode expected)
+    {
+        var client = await Start(
+            configureServices: builder =>
+            {
+                AddJwtAuthentication(builder);
+                builder.Services.AddHealthChecks();
+            },
+            configureApp: app =>
+            {
+                var health = app.MapHealthChecks("/health");
+
+                if (allowAnonymous)
+                {
+                    health.AllowAnonymous();
+                }
+            });
+
+        Assert.Equal(expected, (await client.GetAsync("/health", TestContext.Current.CancellationToken)).StatusCode);
     }
 
     [Fact]
